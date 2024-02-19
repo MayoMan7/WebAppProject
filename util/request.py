@@ -29,16 +29,14 @@ class Request:
                 header_line = header_line.split(": ")
                 key = header_line[0]
                 if(key == "Cookie"):
-                    print("temp")
+                    cookies = header_line[1].split("; ")
+                    for cookie in cookies:
+                        cookie = cookie.split("=")
+                        self.cookies.update(cookie[0],cookie[1])
                 else:
                     value = header_line[1]
                     value = value.strip()
                     self.headers.update({key:value})
-                    
-
-
-
-
 
 
 def test1():
@@ -53,6 +51,13 @@ def test1():
     # It's recommended that you complete this test and add others, including at least one
     # test using a POST request. Also, ensure that the types of all values are correct
 
+def test_2():
+    request_with_cookies = b'GET / HTTP/1.1\r\nHost: localhost:8080\r\nCookie: session_id=123; user_id=123\r\n\r\n'
+    request = Request(request_with_cookies)
+    assert "session_id" in request.cookies
+    assert request.cookies["session_id"] == "123"
+    assert "user_id" in request.cookies
+    assert request.cookies["user_id"] == "123"
 
 if __name__ == '__main__':
     test1()
