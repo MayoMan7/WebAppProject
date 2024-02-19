@@ -2,13 +2,43 @@ class Request:
 
     def __init__(self, request: bytes):
         # TODO: parse the bytes of the request and populate the following instance variables
-
         self.body = b""
         self.method = ""
         self.path = ""
         self.http_version = ""
         self.headers = {}
         self.cookies = {}
+        print(request.decode())
+        lines = request.decode().split("\r\n")
+        line1 = lines[0]
+        line1 = line1.split(" ")
+        self.method = line1[0]
+        self.path = line1[1]
+        self.http_version = line1[2]
+        for row in range(len(lines)):
+            if(row == 0):
+                line1 = lines[row]
+                line1 = line1.split(" ")
+                self.method = line1[0]
+                self.path = line1[1]
+                self.http_version = line1[2]
+            else:
+                header_line = lines[row]
+                if header_line == "":
+                    break
+                header_line = header_line.split(": ")
+                key = header_line[0]
+                if(key == "Cookie"):
+                    print("temp")
+                else:
+                    value = header_line[1]
+                    value = value.strip()
+                    self.headers.update({key:value})
+                    
+
+
+
+
 
 
 def test1():
