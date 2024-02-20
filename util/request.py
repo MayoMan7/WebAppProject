@@ -1,7 +1,10 @@
 class Request:
 
     def __init__(self, request: bytes):
+<<<<<<< Updated upstream
         # TODO: parse the bytes of the request and populate the following instance variables
+=======
+>>>>>>> Stashed changes
         self.body = b""
         self.method = ""
         self.path = ""
@@ -48,5 +51,22 @@ class Request:
         if(index_of_body != -1):
             self.body = request[index_of_body + len("\r\n\r\n"):]
             
+
+        # TODO: parse the bytes of the request and populate the following instance variables
+        temp = request.decode()
+        temp = temp.split("\r\n")
+        line1 = temp[0].split(" ")
+
+        self.method = line1[0]
+        self.path = line1[1]
+        self.http_version = line1[2]
+
+        for line in range(len(temp)):
+            if(line != 0):
+                current_line = temp[line]
+                current_line = current_line.split(": ")
+                if(len(current_line) > 1):
+                    self.headers.update({current_line[0]:current_line[1]})
+        
 
 
