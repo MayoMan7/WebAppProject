@@ -344,8 +344,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         update = {
             "$set": {
-            "message":new_message["message"],
-            "username":new_message["username"]
+            "message":html.escape(new_message["message"]),
+            "username":html.escape(new_message["username"])
             }
         }
         self.chat_collection.update_one({"id":int(id)},update)
