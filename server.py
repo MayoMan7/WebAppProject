@@ -1,8 +1,20 @@
 import socketserver
 from util.request import Request
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
+import json
+import html
+
 
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
+
+    mongo_client = MongoClient("mongo")
+    db = mongo_client["cse312"]
+    chat_collection = db["chat"]
+    message_id = 0
+    count = 0
+
 
     def root_response(self,request):
         responce = request.http_version
@@ -23,13 +35,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             data = file.read()
             body = data.decode()
             body = body.replace("{{visits}}", str(count))
-            print(body)
             body = body.replace("🙂", "&#128578;")
         
 
         
         bytes = len(body)
-        print(responce)
         responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
         responce = responce.encode()
         return responce
@@ -234,9 +244,138 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         body = "The requested content does not exist"
         bytes = len(body)
         responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
-        return responce
+        return responce.encode()
         
+    def recive_messaege(self,request):
+        data = json.loads(request.body)
+        print(data)
+        data = html.escape(data["message"])
+        temp = int(self.message_id) +1
+        data = {"message": data,"username": "guest","id": temp}
+
+        self.chat_collection.insert_one(data)
+
+        data.pop("_id")
+
+        body = json.dumps(data)
+        bytes = len(body)
+        
+        responce = request.http_version
+        responce += " 201 Created\r\n"
+        responce +="Content-Type: application/json\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n"
+
+        responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
+        responce += body
+        return responce.encode()
+    
+   
+
+    def send_mesages(self,request):
+        all_data = self.chat_collection.find({})
+        body = []
+        for entry in all_data:
+            dict = {}
+            dict["message"] = entry["message"]
+            dict["username"] = entry["username"]
+            dict["id"] = entry["id"]
+            body.append(dict) 
+
+        body = json.dumps(body)
+        bytes = len(body)
+        
+        responce = request.http_version
+        responce += " 200 OK\r\n"
+        responce +="Content-Type: application/json\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n"
+
+        responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
+            
+        return responce.encode()
+    
+    def check_message(self,request,id):
+        message = self.chat_collection.find_one({"id": int(id)})
+        
+        if(message == None):
+            return self.bad_responce(request)
+        
+        body = {}
+        body["message"] = message["message"]
+        body["username"] = message["username"]
+        body["id"] = message["id"]
+
+        body = json.dumps(body)
+        bytes = len(body)
+        
+        responce = request.http_version
+        responce += " 200 OK\r\n"
+        responce +="Content-Type: application/json\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n"
+
+        responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
+            
+        return responce.encode()
+    
+    def delete(self,request,id):
+        message = self.chat_collection.find_one({"id": int(id)})
+
+        if(message == None):
+            return self.bad_responce(request)
+
+        self.chat_collection.delete_one({"id": int(id)})
+
+        responce = request.http_version
+        responce += " 204 No Content\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n"
+
+        responce +="Content-Length: " + str(0) + "\r\n\r\n"
+            
+        return responce.encode()
+    
+    def update(self,request,id):
+        message = self.chat_collection.find_one({"id": int(id)})
+        print(f"ORINGINAL MESSAGE = {message}")
+
+        if(message == None):
+            return self.bad_responce(request)
+        
+        new_message = json.loads(request.body)
+        print(f"what im getting from request = {new_message}")
+
+        update = {
+            "$set": {
+            "message":new_message["message"],
+            "username":new_message["username"]
+            }
+        }
+        self.chat_collection.update_one({"id":int(id)},update)
+
+        message = self.chat_collection.find_one({"id": int(id)})
+        print(f"NEW MESSAGE = {message}")
+
+        message.pop("_id")
+
+        body = json.dumps(message)
+        bytes = len(body)
+        
+        responce = request.http_version
+        responce += " 200 OK\r\n"
+        responce +="Content-Type: application/json\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n"
+
+        responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
+        responce += body
+        return responce.encode()
+
+    
     def handle(self):
+
+        all_data = list(MyTCPHandler.chat_collection.find({}))
+        temp = all_data[len(all_data)-1]
+        self.message_id = int(temp["id"])
+    
+
+
         received_data = self.request.recv(2048)
         print(self.client_address)
         # print("--- received data ---")
@@ -249,6 +388,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         request.cookies.get("visits")
 
+        # CODE TO TEST UPDATE
+        # if self.count % 3 == 0:
+        #     print("OVERING CODE TRYING TO UPDATE id 25")
+        #     request = Request(b'PUT /chat-messages/25 HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n\r\n{"message": "Welcome to CSE312!", "username": "Jesse"}')
+        # self.count += 1
 
         if request.path == "/":
             response = self.root_response(request)
@@ -297,23 +441,40 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         if request.path == "/public/favicon.ico":
             response = self.favico_response(request)
             self.request.sendall(response)
+
+        if request.path == "/chat-messages":
+            if request.method == "POST":
+                response = self.recive_messaege(request)
+                self.request.sendall(response)
+            if request.method == "GET":
+                self.request.sendall(self.send_mesages(request))
+        
+        
+        if request.path[:15] == "/chat-messages/":
+            id = request.path[15:]
+            if request.method == "GET":
+                return  self.request.sendall(self.check_message(request,id))
+            if request.method == "DELETE":
+                return self.request.sendall(self.delete(request,id))
+            if request.method == "PUT":
+                return self.request.sendall(self.update(request,id))
+
         else:
-            response = self.bad_responce(request).encode()
+            response = self.bad_responce(request)
             self.request.sendall(response)
-
-
-
-
 
 def main():
     host = "0.0.0.0"
-    port = 8080
+    port = 8080    
+    
 
     socketserver.TCPServer.allow_reuse_address = True
 
     server = socketserver.TCPServer((host, port), MyTCPHandler)
 
     print("Listening on port " + str(port))
+
+    
 
     # server.serve_forever()
     server.serve_forever()
