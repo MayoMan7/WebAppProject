@@ -250,7 +250,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         data = json.loads(request.body)
         print(data)
         data = html.escape(data["message"])
-        temp = int(self.message_id) +1
+        temp = int(self.message_id) + 1 
         data = {"message": data,"username": "guest","id": temp}
 
         self.chat_collection.insert_one(data)
@@ -369,10 +369,12 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
     
     def handle(self):
-
         all_data = list(MyTCPHandler.chat_collection.find({}))
-        temp = all_data[len(all_data)-1]
-        self.message_id = int(temp["id"])
+        if(len(all_data)  > 0):
+            temp = all_data[len(all_data)-1]
+            self.message_id = int(temp["id"])
+        else:
+            self.message_id = 0
     
 
 

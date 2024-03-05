@@ -6,6 +6,7 @@ class Router:
         return bytes
     
 
-    
+    def function(self, request):
+        return b""
 
 
