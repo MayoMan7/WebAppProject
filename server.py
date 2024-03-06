@@ -443,6 +443,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         if request.path == "/public/favicon.ico":
             response = self.favico_response(request)
             self.request.sendall(response)
+        if request.path == "/register":
+            temp = request.method + request.path + request.http_version + str(request.headers) + str(request.cookies) + str(request.body)
+            print(temp)
+        if request.path == "/login":
+            print(request)
 
         if request.path == "/chat-messages":
             if request.method == "POST":
