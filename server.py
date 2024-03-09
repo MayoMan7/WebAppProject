@@ -4,14 +4,21 @@ from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 import json
 import html
-
+from util.router import Router
+import util.auth as Auth
+import bcrypt
+import hashlib
+import os
+import secrets
 
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
 
+    router = Router()
     mongo_client = MongoClient("mongo")
     db = mongo_client["cse312"]
     chat_collection = db["chat"]
+    accounts = db["accounts"]
     message_id = 0
     count = 0
 
@@ -44,114 +51,25 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         responce = responce.encode()
         return responce
     
-    def eagle_response(self,request):
+    def image_response(self,request):
+        print("image called")
         responce = request.http_version
         responce += " 200 OK\r\n"
         responce +="Content-Type: image/jpeg\r\n"
         responce += "X-Content-Type-Options: nosniff\r\n"
-
-
-        name = "public/image/eagle.jpg"
+        print(request.path)
+        file_name = request.path[14:]
+        print(file_name)
+        name = "public/image/" + file_name
         with open(name, "rb") as file:
             data = file.read()
             bytes = len(data)
             body = data
-            
-        responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
-        responce = responce.encode()
-        responce += body
-        return responce  
-
-    def cat_response(self,request):
-        responce = request.http_version
-        responce += " 200 OK\r\n"
-        responce +="Content-Type: image/jpeg\r\n"
-        responce += "X-Content-Type-Options: nosniff\r\n"
-
-
-        name = "public/image/cat.jpg"
-        with open(name, "rb") as file:
-            data = file.read()
-            bytes = len(data)
-            body = data
-            
         responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
         responce = responce.encode()
         responce += body
         return responce
 
-    def dog_response(self,request):
-        responce = request.http_version
-        responce += " 200 OK\r\n"
-        responce +="Content-Type: image/jpeg\r\n"
-        responce += "X-Content-Type-Options: nosniff\r\n"
-
-
-        name = "public/image/dog.jpg"
-        with open(name, "rb") as file:
-            data = file.read()
-            bytes = len(data)
-            body = data
-            
-        responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
-        responce = responce.encode()
-        responce += body
-        return responce
-
-    def e_small_response(self,request):
-        responce = request.http_version
-        responce += " 200 OK\r\n"
-        responce +="Content-Type: image/jpeg\r\n"
-        responce += "X-Content-Type-Options: nosniff\r\n"
-
-
-        name = "public/image/elephant-small.jpg"
-        with open(name, "rb") as file:
-            data = file.read()
-            bytes = len(data)
-            body = data
-            
-        responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
-        responce = responce.encode()
-        responce += body
-        return responce
-
-    def e_response(self,request):
-        responce = request.http_version
-        responce += " 200 OK\r\n"
-        responce +="Content-Type: image/jpeg\r\n"
-        responce += "X-Content-Type-Options: nosniff\r\n"
-
-
-        name = "public/image/elephant.jpg"
-        with open(name, "rb") as file:
-            data = file.read()
-            bytes = len(data)
-            body = data
-            
-        responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
-        responce = responce.encode()
-        responce += body
-        return responce
-
-    def flamingo_response(self,request):
-        responce = request.http_version
-        responce += " 200 OK\r\n"
-        responce +="Content-Type: image/jpeg\r\n"
-        responce += "X-Content-Type-Options: nosniff\r\n"
-
-        name = "public/image/flamingo.jpg"
-        with open(name, "rb") as file:
-            data = file.read()
-            bytes = len(data)
-            body = data
-            
-        responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
-        responce = responce.encode()
-        responce += body
-        return responce
-
-    def kitten_response(self,request):
         responce = request.http_version
         responce += " 200 OK\r\n"
         responce +="Content-Type: image/jpeg\r\n"
@@ -202,7 +120,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         
         
         responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
-        return responce
+        return responce.encode()
     
     def js_response(self,request):
         responce = request.http_version
@@ -219,7 +137,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         
             
         responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
-        return responce
+        return responce.encode()
     
     def css_response(self,request):
         responce = request.http_version
@@ -234,7 +152,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             body = data.decode()
                     
         responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
-        return responce
+        return responce.encode()
     
     def bad_responce(self,request):
         responce = request.http_version
@@ -247,11 +165,19 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         return responce.encode()
         
     def recive_messaege(self,request):
+        print(request.cookies)
         data = json.loads(request.body)
         print(data)
+        username = "guest"
+        if "auth_token" in request.cookies:
+            token = request.cookies["auth_token"]
+            hashed_token = hashlib.sha256(token.encode()).hexdigest()
+            account = self.accounts.find_one({"hashed_token": hashed_token})
+            username = account["username"]
+            print(username)
         data = html.escape(data["message"])
         temp = int(self.message_id) + 1 
-        data = {"message": data,"username": "guest","id": temp}
+        data = {"message": data,"username": username,"id": temp}
 
         self.chat_collection.insert_one(data)
 
@@ -269,8 +195,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         responce += body
         return responce.encode()
     
-   
-
     def send_mesages(self,request):
         all_data = self.chat_collection.find({})
         body = []
@@ -293,7 +217,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             
         return responce.encode()
     
-    def check_message(self,request,id):
+    def check_message(self,request):
+        id = request.path[15:]
         message = self.chat_collection.find_one({"id": int(id)})
         
         if(message == None):
@@ -316,7 +241,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             
         return responce.encode()
     
-    def delete(self,request,id):
+    def delete(self,request):
+        print("DELETE WAS CALLED")
+        print(request)
+        id = request.path[15:]
+        print(id)
         message = self.chat_collection.find_one({"id": int(id)})
 
         if(message == None):
@@ -332,7 +261,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             
         return responce.encode()
     
-    def update(self,request,id):
+    def update(self,request):
+        id = request.path[15:]
         message = self.chat_collection.find_one({"id": int(id)})
         print(f"ORINGINAL MESSAGE = {message}")
 
@@ -367,28 +297,77 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         responce += body
         return responce.encode()
 
+    def register(self,request):
+        print("register called")
+        creds = Auth.extract_credentials(request)
+        print(creds)
+        print(Auth.validate_password(creds[1]))
+        temp = self.accounts.find({})
+        for i in temp:
+            print(i)
+        if Auth.validate_password(creds[1]) == True:
+            bytes = creds[1].encode('utf-8')
+            salt = bcrypt.gensalt()
+            hash = bcrypt.hashpw(bytes,salt)
+            print(hash)
+            data = {"username": creds[0],"salt": salt, "hash": hash}
+            self.accounts.insert_one(data)
+            responce = request.http_version
+            responce += " 302 Found redirect\r\n"
+            responce +="Content-Type: text/html\r\n"
+            responce += "X-Content-Type-Options: nosniff\r\n"
+            responce +="Content-Length: 0" + "\r\n"
+            responce += "Location: /\r\n\r\n"
+            return responce.encode()
+        else:
+            return self.bad_responce(request)
+        
+    
+    def login(self,request):
+        creds = Auth.extract_credentials(request)
+        account = self.accounts.find_one({"username": creds[0]})
+        print(account)
+        if account == None:
+            return self.bad_responce(request)
+        else:
+            bytes = creds[1].encode('utf-8')
+            salt = account["salt"]
+            hash = bcrypt.hashpw(bytes,salt)
+            print(str(hash))
+            if(hash == account["hash"]):
+                token = secrets.token_hex(16)
+                hashed_token = hashlib.sha256(token.encode()).hexdigest()
+                self.accounts.update_one({"_id": account["_id"]}, {"$set": {"hashed_token": hashed_token}})
+
+
+            responce = request.http_version
+            responce += " 302 Found redirect\r\n"
+            responce +="Content-Type: text/html\r\n"
+            responce += "X-Content-Type-Options: nosniff\r\n"
+            responce +="Content-Length: 0" + "\r\n"
+            responce += "Set-Cookie: auth_token=" + str(token) + "; HttpOnly\r\n"
+            responce += "Location: /\r\n\r\n"
+            return responce.encode()
+        
     
     def handle(self):
+        self.setup_router()
         all_data = list(MyTCPHandler.chat_collection.find({}))
         if(len(all_data)  > 0):
             temp = all_data[len(all_data)-1]
             self.message_id = int(temp["id"])
         else:
             self.message_id = 0
-    
-
 
         received_data = self.request.recv(2048)
         print(self.client_address)
-        # print("--- received data ---")
-        # print(received_data)
-        # print("--- end of data ---\n\n")
         request = Request(received_data)
         # TODO: Parse the HTTP request and use self.request.sendall(response) to send your response
         print("--- PATH REQUESTED ---")
         print(request.path)
 
-        request.cookies.get("visits")
+        self.request.sendall(self.router.route_request(request))
+
 
         # CODE TO TEST UPDATE
         # if self.count % 3 == 0:
@@ -396,79 +375,24 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         #     request = Request(b'PUT /chat-messages/25 HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n\r\n{"message": "Welcome to CSE312!", "username": "Jesse"}')
         # self.count += 1
 
-        if request.path == "/":
-            response = self.root_response(request)
-            self.request.sendall(response)
 
-        if request.path == "/public/style.css":
-            response = self.css_response(request).encode()
-            self.request.sendall(response)
 
-        if request.path == "/public/functions.js":
-            response = self.js_response(request).encode()
-            self.request.sendall(response)
+    def setup_router(self):
+        self.router = Router()
+        self.router.add_route("GET","^/$",self.root_response)
+        self.router.add_route("GET","^/public/style.css$",self.css_response)
+        self.router.add_route("GET","^/public/functions.js$",self.js_response)
+        self.router.add_route("GET","^/public/webrtc.js$",self.webrtc_response)
+        self.router.add_route("GET","^/public/image/.*$",self.image_response)
+        self.router.add_route("GET","^/public/favicon.ico$",self.favico_response)
+        self.router.add_route("GET","^/chat-messages$",self.send_mesages)
+        self.router.add_route("POST","^/chat-messages$",self.recive_messaege)
+        self.router.add_route("GET","^/chat-messages/.$",self.check_message)
+        self.router.add_route("DELETE","^/chat-messages/.$",self.delete)
+        self.router.add_route("PUT","^/chat-messages/.$",self.update)
+        self.router.add_route("POST","^/register$",self.register)
+        self.router.add_route("POST","^/login$",self.login)
 
-        if request.path == "/public/webrtc.js":
-            response = self.webrtc_response(request).encode()
-            self.request.sendall(response)
-
-        if request.path == "/public/image/eagle.jpg":
-            response = self.eagle_response(request)
-            self.request.sendall(response)
-
-        if request.path == "/public/image/cat.jpg":
-            response = self.cat_response(request)
-            self.request.sendall(response)
-
-        if request.path == "/public/image/dog.jpg":
-            response = self.dog_response(request)
-            self.request.sendall(response)
-        
-        if request.path == "/public/image/elephant-small.jpg":
-            response = self.e_small_response(request)
-            self.request.sendall(response)
-
-        if request.path == "/public/image/elephant.jpg":
-            response = self.e_response(request)
-            self.request.sendall(response)
-        
-        if request.path == "/public/image/flamingo.jpg":
-            response = self.flamingo_response(request)
-            self.request.sendall(response)
-
-        if request.path == "/public/image/kitten.jpg":
-            response = self.kitten_response(request)
-            self.request.sendall(response)
-
-        if request.path == "/public/favicon.ico":
-            response = self.favico_response(request)
-            self.request.sendall(response)
-        if request.path == "/register":
-            temp = request.method + request.path + request.http_version + str(request.headers) + str(request.cookies) + str(request.body)
-            print(temp)
-        if request.path == "/login":
-            print(request)
-
-        if request.path == "/chat-messages":
-            if request.method == "POST":
-                response = self.recive_messaege(request)
-                self.request.sendall(response)
-            if request.method == "GET":
-                self.request.sendall(self.send_mesages(request))
-        
-        
-        if request.path[:15] == "/chat-messages/":
-            id = request.path[15:]
-            if request.method == "GET":
-                return  self.request.sendall(self.check_message(request,id))
-            if request.method == "DELETE":
-                return self.request.sendall(self.delete(request,id))
-            if request.method == "PUT":
-                return self.request.sendall(self.update(request,id))
-
-        else:
-            response = self.bad_responce(request)
-            self.request.sendall(response)
 
 def main():
     host = "0.0.0.0"
@@ -476,6 +400,8 @@ def main():
     
 
     socketserver.TCPServer.allow_reuse_address = True
+    # MyTCPHandler.setup_router(MyTCPHandler)
+    
 
     server = socketserver.TCPServer((host, port), MyTCPHandler)
 

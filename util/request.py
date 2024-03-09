@@ -10,8 +10,8 @@ class Request:
         self.cookies = {}
         
         lines = request.decode().split("\r\n")
-        if (lines[0] == ""):
-            return
+        # if (lines[0] == ""):
+        #     return
         line1 = lines[0]
         line1 = line1.split(" ")
         self.method = line1[0]
