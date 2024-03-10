@@ -223,6 +223,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         xsrf_token = data.get("xsrf_token")
         print(f"XSRF TOKEN??? = {xsrf_token}")
         username = "guest"
+        data = html.escape(data["message"])
         if "auth_token" in request.cookies:
             token = request.cookies["auth_token"]
             hashed_token = hashlib.sha256(token.encode()).hexdigest()
@@ -230,12 +231,10 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             if account != None:
                 if account["xsrf_token"] == xsrf_token:
                     username = account["username"]
+                    if account["access_token"] != None:
+                        data += self.get_music(account["access_token"])
                 else:
                     return self.forbiden_response(request)
-        print(account)
-        data = html.escape(data["message"]) 
-        if account["access_token"] != None:
-            data += self.get_music(account["access_token"])
         temp = int(self.message_id) + 1 
         data = {"message": data,"username": username,"id": temp}
 
@@ -243,6 +242,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         data.pop("_id")
 
+        temp = self.chat_collection.find({})
+        for i in temp:
+            print(i)
         body = json.dumps(data)
         bytes = len(body)
         

@@ -8,5 +8,7 @@ services:
     build: .
     environment:
       WAIT_HOSTS: mongo:27017
+      CLIENT_ID: "85df4d0b0f974c1b8ba6f2fa9bc80602"
+      CLIENT_SECRET: "574353a0abb84e43b197e328c88b0b7f"
     ports:
       - '8080:8080'
