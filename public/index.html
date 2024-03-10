@@ -34,6 +34,7 @@
 
 
         <div class="chat-form">
+            <input hidden id="xsrf_token" value="{{INSERT TOKEN}}">
             <hr>
             <label>
                 Chat:
@@ -60,8 +61,9 @@
     <div class="user-list">
 
 
-        Register:
         <form action="/register" method="post" enctype="application/x-www-form-urlencoded">
+            <label>Register:</label>
+            <br/>
             <label>Username:
                 <input id="reg-form-username" type="text" name="username_reg"/>
             </label>
@@ -72,8 +74,10 @@
             <input type="submit" value="Post">
         </form>
 
-        Login:
+        
         <form action="/login" method="post" enctype="application/x-www-form-urlencoded">
+            <label>Login:</label>
+            <br/>
             <label>Username:
                 <input id="login-form-username" type="text" name="username_login"/>
             </label>
@@ -83,6 +87,21 @@
             </label>
             <input type="submit" value="Post">
         </form>
+
+        <form action="/spotify" method="post" enctype="application/x-www-form-urlencoded">
+            <label>Login with spotify:</label>
+            <br/>
+            <input type="submit" value="Post">
+        </form>
+
+
+        
+        <form action="/logout" method="post">
+            <label>Logout:</label>
+            <br/>
+            <input type="submit" value="Post">
+        </form>
+    
 
 
         <form action="/profile-pic" id="image-form" method="post" enctype="multipart/form-data">

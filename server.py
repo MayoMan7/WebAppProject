@@ -8,10 +8,8 @@ from util.router import Router
 import util.auth as Auth
 import bcrypt
 import hashlib
-import os
 import secrets
-
-
+import requests 
 class MyTCPHandler(socketserver.BaseRequestHandler):
 
     router = Router()
@@ -21,6 +19,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     accounts = db["accounts"]
     message_id = 0
     count = 0
+
+    redirect_uri = "http://localhost:8080/spotify"
+    client_id = "85df4d0b0f974c1b8ba6f2fa9bc80602"
 
 
     def root_response(self,request):
@@ -43,6 +44,38 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             body = data.decode()
             body = body.replace("{{visits}}", str(count))
             body = body.replace("🙂", "&#128578;")
+
+        if "auth_token" in request.cookies:
+            token = request.cookies["auth_token"]
+            hashed_token = hashlib.sha256(token.encode()).hexdigest()
+            account = self.accounts.find_one({"hashed_token": hashed_token})
+            if account != None:
+                print("authenitcated account")
+                #creating a new xsrf token if user does not have one
+                if "xsrf_token" not in account:
+                    print("account did not have token")
+                    xsrf_token = secrets.token_hex(16)
+                    self.accounts.update_one({"_id": account["_id"]}, {"$set": {"xsrf_token": xsrf_token}})
+                # if user has an xsrf token
+                else:
+                    print("account did have token")
+                    xsrf_token = account["xsrf_token"]
+                print(f"XSRF TOKEN = {xsrf_token}")
+                # injecting token into html
+                body = body.replace("{{INSERT TOKEN}}", xsrf_token)
+                
+                # channging visability of login buttons
+                index = body.find('"/login"') + len('"/login"')
+                body = body[:index] + " hidden " + body[index:]
+                index = body.find('"/register"') + len('"/register"')
+                body = body[:index] + " hidden " + body[index:]
+        else:
+            print("no valid auth token")
+            index = body.find('"/logout"') + len('"/logout"')
+            body = body[:index] + " hidden " + body[index:]
+
+
+                
         
 
         
@@ -163,18 +196,34 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         bytes = len(body)
         responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
         return responce.encode()
-        
+    
+    def forbiden_response(self,request):
+        responce = request.http_version
+        responce += " 403 Forbidden\r\n"
+        responce +="Content-Type: text/plain\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n"
+        body = "Forbiden action"
+        bytes = len(body)
+        responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
+        return responce.encode()
+       
+
     def recive_messaege(self,request):
         print(request.cookies)
         data = json.loads(request.body)
         print(data)
+        xsrf_token = data.get("xsrf_token")
+        print(f"XSRF TOKEN??? = {xsrf_token}")
         username = "guest"
         if "auth_token" in request.cookies:
             token = request.cookies["auth_token"]
             hashed_token = hashlib.sha256(token.encode()).hexdigest()
             account = self.accounts.find_one({"hashed_token": hashed_token})
-            username = account["username"]
-            print(username)
+            if account != None:
+                if account["xsrf_token"] == xsrf_token:
+                    username = account["username"]
+                else:
+                    return self.forbiden_response(request)
         data = html.escape(data["message"])
         temp = int(self.message_id) + 1 
         data = {"message": data,"username": username,"id": temp}
@@ -243,7 +292,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     
     def delete(self,request):
         print("DELETE WAS CALLED")
-        print(request)
         id = request.path[15:]
         print(id)
         message = self.chat_collection.find_one({"id": int(id)})
@@ -251,16 +299,35 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         if(message == None):
             return self.bad_responce(request)
 
-        self.chat_collection.delete_one({"id": int(id)})
+        username = "guest"
+        if "auth_token" in request.cookies:
+            token = request.cookies["auth_token"]
+            hashed_token = hashlib.sha256(token.encode()).hexdigest()
+            account = self.accounts.find_one({"hashed_token": hashed_token})
+            username = account["username"]
+        temp = message["username"]
+        print(f"current user = {username}, message belongs to {temp}")
+        if username == message["username"]:
+            print("message should be deleted")
+            self.chat_collection.delete_one({"id": int(id)})
+            responce = request.http_version
+            responce += " 204 No Content\r\n"
+            responce += "X-Content-Type-Options: nosniff\r\n"
+            responce +="Content-Length: " + str(0) + "\r\n\r\n" 
+            return responce.encode()
+        else:
+            print("invalid delete should give me a 403")
+            return self.forbiden_response(request)
 
-        responce = request.http_version
-        responce += " 204 No Content\r\n"
-        responce += "X-Content-Type-Options: nosniff\r\n"
-
-        responce +="Content-Length: " + str(0) + "\r\n\r\n"
-            
-        return responce.encode()
-    
+            # responce = request.http_version
+            # responce += " 403 Forbidden\r\n"
+            # responce +="Content-Type: text/plain\r\n"
+            # responce += "X-Content-Type-Options: nosniff\r\n"
+            # body = "You cannot delete somone else message"
+            # bytes = len(body)
+            # responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
+            # return responce.encode()
+ 
     def update(self,request):
         id = request.path[15:]
         message = self.chat_collection.find_one({"id": int(id)})
@@ -321,8 +388,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             return responce.encode()
         else:
             return self.bad_responce(request)
-        
-    
+         
     def login(self,request):
         creds = Auth.extract_credentials(request)
         account = self.accounts.find_one({"username": creds[0]})
@@ -338,16 +404,40 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 token = secrets.token_hex(16)
                 hashed_token = hashlib.sha256(token.encode()).hexdigest()
                 self.accounts.update_one({"_id": account["_id"]}, {"$set": {"hashed_token": hashed_token}})
+                responce = request.http_version
+                responce += " 302 Found redirect\r\n"
+                responce +="Content-Type: text/html\r\n"
+                responce += "X-Content-Type-Options: nosniff\r\n"
+                responce +="Content-Length: 0" + "\r\n"
+                responce += "Set-Cookie: auth_token=" + str(token) + "; Max-Age=3600; HttpOnly\r\n"
+                responce += "Location: /\r\n\r\n"
+                return responce.encode()
+            else:
+                return self.bad_responce(request)
+        
+    def logout(self,request):
+        if "auth_token" in request.cookies:
+            token = request.cookies["auth_token"]
+            hashed_token = hashlib.sha256(token.encode()).hexdigest()
+            self.accounts.update_one({"hashed_token": hashed_token}, {"$unset": {"hashed_token": ""}})
 
+        response = request.http_version + " 302 Found redirect\r\n"
+        response += "Content-Type: text/html\r\n"
+        response += "X-Content-Type-Options: nosniff\r\n"
+        response += "Content-Length: 0" + "\r\n"
+        response += "Set-Cookie: auth_token=; Max-Age=0; HttpOnly\r\n"
+        response += "Location: /\r\n\r\n"  
+        return response.encode()
 
-            responce = request.http_version
-            responce += " 302 Found redirect\r\n"
-            responce +="Content-Type: text/html\r\n"
-            responce += "X-Content-Type-Options: nosniff\r\n"
-            responce +="Content-Length: 0" + "\r\n"
-            responce += "Set-Cookie: auth_token=" + str(token) + "; HttpOnly\r\n"
-            responce += "Location: /\r\n\r\n"
-            return responce.encode()
+    def login_with_spotify(self,requst):
+        authorization_url = 'https://accounts.spotify.com/authorize'
+        authorization_params = {
+            'client_id': self.client_id,
+            'response_type': 'code',
+            'redirect_uri': self.redirect_uri,
+            'scope': 'user-read-email user-read-private'
+        }
+        response = requests.get(authorization_url, params=authorization_params)
         
     
     def handle(self):
@@ -360,12 +450,10 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             self.message_id = 0
 
         received_data = self.request.recv(2048)
-        print(self.client_address)
         request = Request(received_data)
         # TODO: Parse the HTTP request and use self.request.sendall(response) to send your response
         print("--- PATH REQUESTED ---")
-        print(request.path)
-
+        print(f"{request.method} {request.path}")
         self.request.sendall(self.router.route_request(request))
 
 
@@ -388,10 +476,13 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("GET","^/chat-messages$",self.send_mesages)
         self.router.add_route("POST","^/chat-messages$",self.recive_messaege)
         self.router.add_route("GET","^/chat-messages/.$",self.check_message)
-        self.router.add_route("DELETE","^/chat-messages/.$",self.delete)
+        self.router.add_route("DELETE","^/chat-messages/.*$",self.delete)
         self.router.add_route("PUT","^/chat-messages/.$",self.update)
         self.router.add_route("POST","^/register$",self.register)
         self.router.add_route("POST","^/login$",self.login)
+        self.router.add_route("POST","^/logout$",self.logout)
+        self.router.add_route("POST","^/spotify$",self.login_with_spotify)
+
 
 
 def main():
