@@ -1,4 +1,7 @@
+import base64
 import socketserver
+
+import requests
 from util.request import Request
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
@@ -9,7 +12,9 @@ import util.auth as Auth
 import bcrypt
 import hashlib
 import secrets
-import requests 
+import urllib
+import os
+
 class MyTCPHandler(socketserver.BaseRequestHandler):
 
     router = Router()
@@ -20,8 +25,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     message_id = 0
     count = 0
 
-    redirect_uri = "http://localhost:8080/spotify"
-    client_id = "85df4d0b0f974c1b8ba6f2fa9bc80602"
+    redirect_uri = os.getenv("REDIRECT_URI")
+    client_id = os.getenv("CLIENT_ID")
+    client_secret = os.getenv("CLIENT_SECRET")
 
 
     def root_response(self,request):
@@ -68,6 +74,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 index = body.find('"/login"') + len('"/login"')
                 body = body[:index] + " hidden " + body[index:]
                 index = body.find('"/register"') + len('"/register"')
+                body = body[:index] + " hidden " + body[index:]
+                index = body.find('"/spotify"') + len('"/spotify"')
                 body = body[:index] + " hidden " + body[index:]
         else:
             print("no valid auth token")
@@ -224,7 +232,10 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                     username = account["username"]
                 else:
                     return self.forbiden_response(request)
-        data = html.escape(data["message"])
+        print(account)
+        data = html.escape(data["message"]) 
+        if account["access_token"] != None:
+            data += self.get_music(account["access_token"])
         temp = int(self.message_id) + 1 
         data = {"message": data,"username": username,"id": temp}
 
@@ -365,13 +376,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         return responce.encode()
 
     def register(self,request):
-        print("register called")
         creds = Auth.extract_credentials(request)
         print(creds)
-        print(Auth.validate_password(creds[1]))
-        temp = self.accounts.find({})
-        for i in temp:
-            print(i)
         if Auth.validate_password(creds[1]) == True:
             bytes = creds[1].encode('utf-8')
             salt = bcrypt.gensalt()
@@ -429,17 +435,130 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         response += "Location: /\r\n\r\n"  
         return response.encode()
 
-    def login_with_spotify(self,requst):
-        authorization_url = 'https://accounts.spotify.com/authorize'
+    def login_with_spotify(self,request):
+        authorization_url = 'https://accounts.spotify.com/authorize?'
         authorization_params = {
             'client_id': self.client_id,
             'response_type': 'code',
             'redirect_uri': self.redirect_uri,
-            'scope': 'user-read-email user-read-private'
+            'scope': 'user-read-email user-read-private user-read-currently-playing'
         }
-        response = requests.get(authorization_url, params=authorization_params)
-        
+        url = requests.get(authorization_url,authorization_params).url
+
+        responce = request.http_version + " 302 Found redirect\r\n"
+        responce +="Content-Type: text/html\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n"
+        responce +="Content-Length: 0" + "\r\n"
+        responce += "Location: " + url + "\r\n\r\n"
+        return responce.encode()
     
+    def extract_code(self, request):
+        print("--------")
+        print("EXTRACT CODE CALLED")
+        authorization_code = request.path[14:]
+        
+        auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
+
+        # Request body parameters
+        data = {
+            'grant_type': "authorization_code",
+            'code': authorization_code,
+            'redirect_uri': self.redirect_uri
+        }
+
+        # Request headers
+        headers = {
+            'Authorization': f'Basic {auth_header}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+
+        # POST request
+        response = requests.post('https://accounts.spotify.com/api/token', data=data, headers=headers)
+
+        
+        
+        print(response)
+        access_token = json.loads(response.text)["access_token"]
+        print(f"token = {access_token}")
+        if access_token != None:
+            email = self.get_email(access_token)
+        
+        account = self.accounts.find_one({"username": email})
+        print(account)
+        token = secrets.token_hex(16)
+        hashed_token = hashlib.sha256(token.encode()).hexdigest()
+        if account == None:
+            print("creating account with spotify")
+            data = {"username": email, "access_token": access_token, "hashed_token": hashed_token}
+            self.accounts.insert_one(data)
+            
+        else:
+            print("account with spotify exists")
+            self.accounts.update_one({"_id": account["_id"]}, {"$set": {"access_token": access_token, "hashed_token" : hashed_token}})
+
+        print(account)
+
+        responce = request.http_version
+        responce += " 302 Found redirect\r\n"
+        responce +="Content-Type: text/html\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n"
+        responce +="Content-Length: 0" + "\r\n"
+        responce += "Set-Cookie: auth_token=" + str(token) + "; Max-Age=3600; HttpOnly\r\n"
+        responce += "Location: /\r\n\r\n"
+        return responce.encode()
+    
+               
+    def get_email(self, access_token):
+        # Spotify user profile endpoint
+        profile_url = 'https://api.spotify.com/v1/me'
+
+        # Request headers with the access token
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+
+        # Make the request to Spotify API
+        response = requests.get(profile_url, headers=headers)
+
+        # Check if request was successful
+        if response.status_code == 200:
+            # Parse the response to extract user data, including email
+            user_data = response.json()
+            email = user_data.get('email')
+            return email
+        else:
+            # Handle errors gracefully
+            print(f"Error retrieving user email: {response.status_code} - {response.text}")
+            return None
+
+    def get_music(self, access_token):
+        url = 'https://api.spotify.com/v1/me/player/currently-playing'
+
+        # Request headers
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+
+        # Make GET request to Spotify API
+        response = requests.get(url, headers=headers)
+
+        # Check if request was successful
+        print(response.text)
+        string = " (Currently listening to: Nothing)"
+        if response.status_code == 200:
+            # Parse JSON response into a dictionary
+            data = response.json()
+
+            # Check if the user is currently playing a track
+            if data.get('is_playing'):
+                # Extract information about the currently playing track
+                song = data['item']['name']
+                artist = data['item']['artists'][0]['name']
+                string = " (Currently listening to: " + str(song) + " by " + str(artist)+ ")"
+        
+        return string
+
+
     def handle(self):
         self.setup_router()
         all_data = list(MyTCPHandler.chat_collection.find({}))
@@ -482,6 +601,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("POST","^/login$",self.login)
         self.router.add_route("POST","^/logout$",self.logout)
         self.router.add_route("POST","^/spotify$",self.login_with_spotify)
+        self.router.add_route("GET","^/spotify?.*$",self.extract_code)
 
 
 
