@@ -10,5 +10,6 @@ services:
       WAIT_HOSTS: mongo:27017
       CLIENT_ID: "" # add your id
       CLIENT_SECRET: "" # add your secret
+      REDIRECT_URI: "http://localhost:8080/spotify"
     ports:
       - '8080:8080'

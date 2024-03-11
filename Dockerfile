@@ -2,7 +2,6 @@ FROM python:3.8.2
 ENV HOME /root
 WORKDIR /root
 
-ENV REDIRECT_URI="http://localhost:8080/spotify"
 COPY . .
 # Download dependancies
 RUN pip3 install -r requirements.txt
