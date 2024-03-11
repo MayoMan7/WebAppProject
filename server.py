@@ -66,7 +66,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 else:
                     print("account did have token")
                     xsrf_token = account["xsrf_token"]
-                print(f"XSRF TOKEN = {xsrf_token}")
                 # injecting token into html
                 body = body.replace("{{INSERT TOKEN}}", xsrf_token)
                 
@@ -93,14 +92,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         return responce
     
     def image_response(self,request):
-        print("image called")
         responce = request.http_version
         responce += " 200 OK\r\n"
         responce +="Content-Type: image/jpeg\r\n"
         responce += "X-Content-Type-Options: nosniff\r\n"
-        print(request.path)
         file_name = request.path[14:]
-        print(file_name)
         name = "public/image/" + file_name
         with open(name, "rb") as file:
             data = file.read()
@@ -217,11 +213,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
        
 
     def recive_messaege(self,request):
-        print(request.cookies)
         data = json.loads(request.body)
-        print(data)
         xsrf_token = data.get("xsrf_token")
-        print(f"XSRF TOKEN??? = {xsrf_token}")
         username = "guest"
         data = html.escape(data["message"])
         if "auth_token" in request.cookies:
@@ -231,7 +224,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             if account != None:
                 if account["xsrf_token"] == xsrf_token:
                     username = account["username"]
-                    if account["access_token"] != None:
+                    if "access_token" in account:
                         data += self.get_music(account["access_token"])
                 else:
                     return self.forbiden_response(request)
@@ -242,9 +235,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         data.pop("_id")
 
-        temp = self.chat_collection.find({})
-        for i in temp:
-            print(i)
         body = json.dumps(data)
         bytes = len(body)
         
@@ -304,9 +294,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         return responce.encode()
     
     def delete(self,request):
-        print("DELETE WAS CALLED")
         id = request.path[15:]
-        print(id)
         message = self.chat_collection.find_one({"id": int(id)})
 
         if(message == None):
@@ -344,13 +332,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     def update(self,request):
         id = request.path[15:]
         message = self.chat_collection.find_one({"id": int(id)})
-        print(f"ORINGINAL MESSAGE = {message}")
 
         if(message == None):
             return self.bad_responce(request)
         
         new_message = json.loads(request.body)
-        print(f"what im getting from request = {new_message}")
 
         update = {
             "$set": {
@@ -361,7 +347,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.chat_collection.update_one({"id":int(id)},update)
 
         message = self.chat_collection.find_one({"id": int(id)})
-        print(f"NEW MESSAGE = {message}")
 
         message.pop("_id")
 
@@ -379,12 +364,10 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
     def register(self,request):
         creds = Auth.extract_credentials(request)
-        print(creds)
         if Auth.validate_password(creds[1]) == True:
             bytes = creds[1].encode('utf-8')
             salt = bcrypt.gensalt()
             hash = bcrypt.hashpw(bytes,salt)
-            print(hash)
             data = {"username": creds[0],"salt": salt, "hash": hash}
             self.accounts.insert_one(data)
             responce = request.http_version
@@ -400,14 +383,12 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     def login(self,request):
         creds = Auth.extract_credentials(request)
         account = self.accounts.find_one({"username": creds[0]})
-        print(account)
         if account == None:
             return self.bad_responce(request)
         else:
             bytes = creds[1].encode('utf-8')
             salt = account["salt"]
             hash = bcrypt.hashpw(bytes,salt)
-            print(str(hash))
             if(hash == account["hash"]):
                 token = secrets.token_hex(16)
                 hashed_token = hashlib.sha256(token.encode()).hexdigest()
@@ -455,8 +436,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         return responce.encode()
     
     def extract_code(self, request):
-        print("--------")
-        print("EXTRACT CODE CALLED")
         authorization_code = request.path[14:]
         
         auth_header = base64.b64encode(f"{self.client_id}:{self.client_secret}".encode()).decode()
@@ -479,14 +458,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         
         
-        print(response)
         access_token = json.loads(response.text)["access_token"]
-        print(f"token = {access_token}")
         if access_token != None:
             email = self.get_email(access_token)
         
         account = self.accounts.find_one({"username": email})
-        print(account)
         token = secrets.token_hex(16)
         hashed_token = hashlib.sha256(token.encode()).hexdigest()
         if account == None:
@@ -498,7 +474,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             print("account with spotify exists")
             self.accounts.update_one({"_id": account["_id"]}, {"$set": {"access_token": access_token, "hashed_token" : hashed_token}})
 
-        print(account)
 
         responce = request.http_version
         responce += " 302 Found redirect\r\n"
@@ -511,49 +486,32 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     
                
     def get_email(self, access_token):
-        # Spotify user profile endpoint
         profile_url = 'https://api.spotify.com/v1/me'
 
-        # Request headers with the access token
         headers = {
             'Authorization': f'Bearer {access_token}'
         }
-
-        # Make the request to Spotify API
         response = requests.get(profile_url, headers=headers)
-
-        # Check if request was successful
         if response.status_code == 200:
-            # Parse the response to extract user data, including email
             user_data = response.json()
             email = user_data.get('email')
             return email
         else:
-            # Handle errors gracefully
             print(f"Error retrieving user email: {response.status_code} - {response.text}")
             return None
 
     def get_music(self, access_token):
         url = 'https://api.spotify.com/v1/me/player/currently-playing'
 
-        # Request headers
         headers = {
             'Authorization': f'Bearer {access_token}'
         }
-
-        # Make GET request to Spotify API
         response = requests.get(url, headers=headers)
 
-        # Check if request was successful
-        print(response.text)
         string = " (Currently listening to: Nothing)"
         if response.status_code == 200:
-            # Parse JSON response into a dictionary
             data = response.json()
-
-            # Check if the user is currently playing a track
             if data.get('is_playing'):
-                # Extract information about the currently playing track
                 song = data['item']['name']
                 artist = data['item']['artists'][0]['name']
                 string = " (Currently listening to: " + str(song) + " by " + str(artist)+ ")"
@@ -596,6 +554,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("GET","^/public/favicon.ico$",self.favico_response)
         self.router.add_route("GET","^/chat-messages$",self.send_mesages)
         self.router.add_route("POST","^/chat-messages$",self.recive_messaege)
+        self.router.add_route("POST","^/chat-messages/$",self.recive_messaege)
         self.router.add_route("GET","^/chat-messages/.$",self.check_message)
         self.router.add_route("DELETE","^/chat-messages/.*$",self.delete)
         self.router.add_route("PUT","^/chat-messages/.$",self.update)
