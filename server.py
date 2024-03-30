@@ -3,6 +3,7 @@ import socketserver
 
 import requests
 from util.request import Request
+from util.multipart import parse_multipart
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 import json
@@ -97,6 +98,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         responce +="Content-Type: image/jpeg\r\n"
         responce += "X-Content-Type-Options: nosniff\r\n"
         file_name = request.path[14:]
+        file_name = file_name.replace("/","")
         name = "public/image/" + file_name
         with open(name, "rb") as file:
             data = file.read()
@@ -107,22 +109,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         responce += body
         return responce
 
-        responce = request.http_version
-        responce += " 200 OK\r\n"
-        responce +="Content-Type: image/jpeg\r\n"
-        responce += "X-Content-Type-Options: nosniff\r\n"
-
-
-        name = "public/image/kitten.jpg"
-        with open(name, "rb") as file:
-            data = file.read()
-            bytes = len(data)
-            body = data
-            
-        responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
-        responce = responce.encode()
-        responce += body
-        return responce
     
     def favico_response(self,request):
         responce = request.http_version
@@ -519,6 +505,62 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         return string
 
 
+    def upload(self, request):
+        length = int(request.headers["Content-Length"])
+        while len(request.body) < length:
+            received_data = self.request.recv(2048)
+            request.body += received_data
+
+        multipart_data = parse_multipart(request)
+
+        
+        if multipart_data.parts[0].headers.get("Content-Type", "").startswith("image"):
+            image_part = multipart_data.parts[0]
+
+        
+        if image_part:
+            # Create the directory if it doesn't exist
+            image_directory = os.path.join("public", "image")
+            os.makedirs(image_directory, exist_ok=True)
+            
+            # Save the image to disk
+            image_content = image_part.content
+            image_count = len(os.listdir(image_directory))
+            image_filename = f"image{image_count + 1}.jpg"
+            try:
+                with open(os.path.join(image_directory, image_filename), "wb") as f:
+                    f.write(image_content)
+                print("Image saved successfully!")
+            except Exception as e:
+                print(f"Error saving image: {e}")
+
+            data = '<img src="' + os.path.join(image_directory, image_filename) +'" alt="Image">'
+            username = "guest"
+            if "auth_token" in request.cookies:
+                token = request.cookies["auth_token"]
+                hashed_token = hashlib.sha256(token.encode()).hexdigest()
+                account = self.accounts.find_one({"hashed_token": hashed_token})
+                if account != None:
+                    username = account["username"]
+            temp = int(self.message_id) + 1 
+            data = {"message": data,"username": username,"id": temp}
+
+            self.chat_collection.insert_one(data)
+
+            data.pop("_id")
+            
+            responce = request.http_version
+            responce += " 302 Found redirect\r\n"
+            responce +="Content-Type: text/html\r\n"
+            responce += "X-Content-Type-Options: nosniff\r\n"
+            responce +="Content-Length: 0" + "\r\n"
+            responce += "Location: /\r\n\r\n"
+            return responce.encode()
+
+            
+
+
+
     def handle(self):
         self.setup_router()
         all_data = list(MyTCPHandler.chat_collection.find({}))
@@ -534,9 +576,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         print("--- PATH REQUESTED ---")
         print(f"{request.method} {request.path}")
         self.request.sendall(self.router.route_request(request))
-
-
-        # CODE TO TEST UPDATE
+    
+            # CODE TO TEST UPDATE
         # if self.count % 3 == 0:
         #     print("OVERING CODE TRYING TO UPDATE id 25")
         #     request = Request(b'PUT /chat-messages/25 HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n\r\n{"message": "Welcome to CSE312!", "username": "Jesse"}')
@@ -563,6 +604,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("POST","^/logout$",self.logout)
         self.router.add_route("POST","^/spotify$",self.login_with_spotify)
         self.router.add_route("GET","^/spotify?.*$",self.extract_code)
+        self.router.add_route("POST","^/upload$",self.upload)
+
+    
 
 
 

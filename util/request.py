@@ -8,10 +8,14 @@ class Request:
         self.http_version = ""
         self.headers = {}
         self.cookies = {}
+
+
+        headers = request.split(b'\r\n\r\n',1)[0]
+        body = request.split(b'\r\n\r\n',1)[1]
+
+    
         
-        lines = request.decode().split("\r\n")
-        # if (lines[0] == ""):
-        #     return
+        lines = headers.decode().split("\r\n")
         line1 = lines[0]
         line1 = line1.split(" ")
         self.method = line1[0]
@@ -36,9 +40,7 @@ class Request:
                     self.cookies.update({key:value})
             
 
-        index_of_body = request.decode().find("\r\n\r\n")
-        if(index_of_body != -1):
-            self.body = request[index_of_body + len("\r\n\r\n"):]
+        self.body = body
 
 
 def test1():

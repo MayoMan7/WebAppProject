@@ -41,7 +41,16 @@
                 <input id="chat-text-box" type="text">
             </label>
             <button id="chat-button" onclick="sendChat()">Send</button>
+            
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <label>File: <br/>
+                <input type="file" name="upload"><br/>
+                </label>
+                <input type="submit" value="Submit">
+            </form>     
+
         </div>
+
 
     </div>
 
