@@ -15,6 +15,7 @@ import hashlib
 import secrets
 import urllib
 import os
+import subprocess
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
 
@@ -550,29 +551,26 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         filetype = signature[1]
         
         if part:
-            # Create the directory if it doesn't exist
             image_directory = os.path.join("public", "image")
-            os.makedirs(image_directory, exist_ok=True)
             
-            # Save the image to disk
             image_content = part.content
             image_count = len(os.listdir(image_directory))
             image_filename = f"{format}{image_count + 1}.{filetype}"
-            try:
-                with open(os.path.join(image_directory, image_filename), "wb") as f:
-                    f.write(image_content)
-                print("Image saved successfully!")
-            except Exception as e:
-                print(f"Error saving image: {e}")
+            
             
             if(format == "image"):
-                data = '<img src="' + os.path.join(image_directory, image_filename) +'" alt="Image">'
+                with open(os.path.join(image_directory, image_filename), "wb") as f:
+                    f.write(image_content)
+                data = '<img width="400" src="' + os.path.join(image_directory, image_filename) +'" alt="Image">'
+            
             if format == "video":
-                data = '<video controls><source src="' + os.path.join(image_directory, image_filename) + '" type="video/mp4"></video>'
+                with open(os.path.join(image_directory, image_filename), "wb") as f:
+                    f.write(image_content)
+                data = '<video width="400" controls autoplay muted><source src="' + os.path.join(image_directory, image_filename) +'" type="video/mp4"></video>'
             username = "guest"
             if "auth_token" in request.cookies:
                 token = request.cookies["auth_token"]
-                hashed_token = hashlib.sha256(token.encode()).hexdigest()
+                hashed_token = hashlib.sha256(  token.encode()).hexdigest()
                 account = self.accounts.find_one({"hashed_token": hashed_token})
                 if account != None:
                     username = account["username"]
