@@ -93,21 +93,38 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         return responce
     
     def image_response(self,request):
-        responce = request.http_version
-        responce += " 200 OK\r\n"
-        responce +="Content-Type: image/jpeg\r\n"
-        responce += "X-Content-Type-Options: nosniff\r\n"
+
         file_name = request.path[14:]
+        print(file_name)
         file_name = file_name.replace("/","")
-        name = "public/image/" + file_name
+        file_extension = file_name.split(".")[1]
+        name = os.path.join("public", "image", file_name)
+        content_types = {
+            "jpg" : "image/jpeg",
+            "gif": "image/gif",
+            "png": "image/png",
+            "mp4": "video/mp4",
+        }
+        content_type = ""
+        for file_type in content_types.keys():
+            if file_extension == file_type:
+                content_type = content_types[file_type]
+
+       
         with open(name, "rb") as file:
             data = file.read()
             bytes = len(data)
             body = data
+        print("file sucess")
+        responce = request.http_version
+        responce += " 200 OK\r\n"
+        responce +="Content-Type: " + content_type + "\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n"
         responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
         responce = responce.encode()
         responce += body
         return responce
+    
 
     
     def favico_response(self,request):
@@ -305,15 +322,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         else:
             print("invalid delete should give me a 403")
             return self.forbiden_response(request)
-
-            # responce = request.http_version
-            # responce += " 403 Forbidden\r\n"
-            # responce +="Content-Type: text/plain\r\n"
-            # responce += "X-Content-Type-Options: nosniff\r\n"
-            # body = "You cannot delete somone else message"
-            # bytes = len(body)
-            # responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
-            # return responce.encode()
  
     def update(self,request):
         id = request.path[15:]
@@ -504,37 +512,63 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         
         return string
 
+    def get_filetype(self,part):
+        image_signatures = {
+        b'\xff\xD8\xff': "image/jpg",
+        b'\x89\x50\x4e\x47\x0d\x0a\x1a\x0a': "image/png",
+        b'\x47\x49\x46\x38\x37\x61': "image/gif",
+        b'\x47\x49\x46\x38\x39\x61': "image/gif",
+        }
+        mp4_signature1 = b'\x00\x00\x00'
+        for signature in image_signatures.keys():
+            if part.content.startswith(signature):
+                return(image_signatures[signature])
+        if part.content.startswith(mp4_signature1):
+            return "video/mp4"
+    
+        
+        return None
+
+        
 
     def upload(self, request):
         length = int(request.headers["Content-Length"])
         while len(request.body) < length:
-            received_data = self.request.recv(2048)
+            received_data = self.request.recv(4096)
             request.body += received_data
 
         multipart_data = parse_multipart(request)
 
         
         if multipart_data.parts[0].headers.get("Content-Type", "").startswith("image"):
-            image_part = multipart_data.parts[0]
+            part = multipart_data.parts[0]
+        if multipart_data.parts[0].headers.get("Content-Type", "").startswith("video"):
+            part = multipart_data.parts[0]
 
+        signature = self.get_filetype(part).split("/")
+        format = signature[0]
+        filetype = signature[1]
         
-        if image_part:
+        if part:
             # Create the directory if it doesn't exist
             image_directory = os.path.join("public", "image")
             os.makedirs(image_directory, exist_ok=True)
             
             # Save the image to disk
-            image_content = image_part.content
+            image_content = part.content
             image_count = len(os.listdir(image_directory))
-            image_filename = f"image{image_count + 1}.jpg"
+            image_filename = f"{format}{image_count + 1}.{filetype}"
             try:
                 with open(os.path.join(image_directory, image_filename), "wb") as f:
                     f.write(image_content)
                 print("Image saved successfully!")
             except Exception as e:
                 print(f"Error saving image: {e}")
-
-            data = '<img src="' + os.path.join(image_directory, image_filename) +'" alt="Image">'
+            
+            if(format == "image"):
+                data = '<img src="' + os.path.join(image_directory, image_filename) +'" alt="Image">'
+            if format == "video":
+                data = '<video controls><source src="' + os.path.join(image_directory, image_filename) + '" type="video/mp4"></video>'
             username = "guest"
             if "auth_token" in request.cookies:
                 token = request.cookies["auth_token"]
