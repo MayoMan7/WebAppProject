@@ -13,9 +13,7 @@ import util.auth as Auth
 import bcrypt
 import hashlib
 import secrets
-import urllib
 import os
-import subprocess
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
 
@@ -111,21 +109,23 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             if file_extension == file_type:
                 content_type = content_types[file_type]
 
-       
-        with open(name, "rb") as file:
-            data = file.read()
-            bytes = len(data)
-            body = data
-        print("file sucess")
-        responce = request.http_version
-        responce += " 200 OK\r\n"
-        responce +="Content-Type: " + content_type + "\r\n"
-        responce += "X-Content-Type-Options: nosniff\r\n"
-        responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
-        responce = responce.encode()
-        responce += body
-        return responce
-    
+        try:       
+            with open(name, "rb") as file:
+                data = file.read()
+                bytes = len(data)
+                body = data
+            print("file sucess")
+            responce = request.http_version
+            responce += " 200 OK\r\n"
+            
+            responce +="Content-Type: " + content_type + "\r\n"
+            responce += "X-Content-Type-Options: nosniff\r\n"
+            responce +="Content-Length: " + str(bytes) + "\r\n\r\n"
+            responce = responce.encode()
+            responce += body
+            return responce
+        except:
+            return self.bad_responce(request)
 
     
     def favico_response(self,request):
@@ -540,11 +540,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         multipart_data = parse_multipart(request)
 
+
+        part = multipart_data.parts[0]
         
-        if multipart_data.parts[0].headers.get("Content-Type", "").startswith("image"):
-            part = multipart_data.parts[0]
-        if multipart_data.parts[0].headers.get("Content-Type", "").startswith("video"):
-            part = multipart_data.parts[0]
 
         signature = self.get_filetype(part).split("/")
         format = signature[0]
