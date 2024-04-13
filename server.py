@@ -4,6 +4,7 @@ import socketserver
 import requests
 from util.request import Request
 from util.multipart import parse_multipart
+import util.websockets
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 import json
@@ -588,6 +589,52 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             return responce.encode()
 
             
+    def handshake(self, request):
+        print(request)
+        key = request.headers["Sec-WebSocket-Key"]
+        key = util.websockets.compute_accept(key)
+        
+        responce = request.http_version
+        responce += " 101 Switching Protocols\r\n"
+        responce +="Connection: Upgrade\r\n"
+        responce +="Upgrade: websocket\r\n"
+        responce +=f"Sec-WebSocket-Accept: {key}\r\n"
+        responce += "X-Content-Type-Options: nosniff\r\n\r\n"
+        self.request.sendall(responce.encode())
+        self.websocket_loop(request)
+
+    def websocket_loop(self,request):
+        received_data = b""
+        # while we dont recive a signal to end the loop
+        while True:
+            additional_data = self.request.recv(2048)
+            
+            # loop until all frame have been processed
+            while True:
+                additional_data = self.request.recv(2048)
+                received_data += additional_data
+                frame = util.websockets.parse_ws_frame(received_data)
+                fin = frame.fin_bit
+                length = frame.payload_length
+                payload = frame.payload
+
+                print(f"payload : {payload}")
+
+                # check if all frame shave been recived
+                if len(payload) >= length:
+                    if frame.opcode == 0x8:
+                        return
+                    
+                    received_data = received_data[length:]
+
+                else:
+                    break
+                
+
+                    
+                    
+
+
 
 
 
@@ -602,16 +649,14 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         received_data = self.request.recv(2048)
         request = Request(received_data)
-        # TODO: Parse the HTTP request and use self.request.sendall(response) to send your response
         print("--- PATH REQUESTED ---")
         print(f"{request.method} {request.path}")
-        self.request.sendall(self.router.route_request(request))
+        if request.path == "/websocket":
+            self.handshake(request)
+        else:
+            self.request.sendall(self.router.route_request(request))
     
-            # CODE TO TEST UPDATE
-        # if self.count % 3 == 0:
-        #     print("OVERING CODE TRYING TO UPDATE id 25")
-        #     request = Request(b'PUT /chat-messages/25 HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n\r\n{"message": "Welcome to CSE312!", "username": "Jesse"}')
-        # self.count += 1
+
 
 
 
@@ -649,7 +694,7 @@ def main():
     # MyTCPHandler.setup_router(MyTCPHandler)
     
 
-    server = socketserver.TCPServer((host, port), MyTCPHandler)
+    server = socketserver.ThreadingTCPServer((host, port), MyTCPHandler)
 
     print("Listening on port " + str(port))
 

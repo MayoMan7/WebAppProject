@@ -57,7 +57,7 @@ function sendChat() {
     chatTextBox.value = "";
     if (ws) {
         // Using WebSockets
-        socket.send(JSON.stringify({'messageType': 'chatMessage', 'message': message, 'xsrf_token': xsrf_token}));
+        socket.send(JSON.stringify({'messageType': 'chatMessage', 'message': message}));
     } else {
         // Using AJAX
         const request = new XMLHttpRequest();
