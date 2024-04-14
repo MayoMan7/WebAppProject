@@ -29,6 +29,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     redirect_uri = os.getenv("REDIRECT_URI")
     client_id = os.getenv("CLIENT_ID")
     client_secret = os.getenv("CLIENT_SECRET")
+    
+    websocket_users = []
+
 
 
     def root_response(self,request):
@@ -590,6 +593,15 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
             
     def handshake(self, request):
+        username = "Guest"
+        if "auth_token" in request.cookies:
+            token = request.cookies["auth_token"]
+            hashed_token = hashlib.sha256(token.encode()).hexdigest()
+            account = self.accounts.find_one({"hashed_token": hashed_token})
+            if account != None:
+                username = account["username"]
+
+        
         print(request)
         key = request.headers["Sec-WebSocket-Key"]
         key = util.websockets.compute_accept(key)
@@ -601,42 +613,92 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         responce +=f"Sec-WebSocket-Accept: {key}\r\n"
         responce += "X-Content-Type-Options: nosniff\r\n\r\n"
         self.request.sendall(responce.encode())
-        self.websocket_loop(request)
+        self.websocket_users.append(self.request)
+        self.websocket_loop(request,username)
 
-    def websocket_loop(self,request):
-        received_data = b""
-        # while we dont recive a signal to end the loop
+
+
+    def websocket_loop(self,request, username):
+        extra_data = b""
         while True:
-            additional_data = self.request.recv(2048)
+            bytes_read = 0
+            received_data = extra_data
+            received_data += self.request.recv(2048)
+            bytes_read += 2048
+
+            is_end = False
+            final = b""
             
-            # loop until all frame have been processed
-            while True:
-                additional_data = self.request.recv(2048)
-                received_data += additional_data
+            while not is_end:
                 frame = util.websockets.parse_ws_frame(received_data)
+                opcode = frame.opcode
                 fin = frame.fin_bit
                 length = frame.payload_length
                 payload = frame.payload
+                if frame.opcode == 0x8:
+                    self.websocket_users.remove(self.request)
+                    break
 
+                # this is where we buffer
+                if bytes_read < len(payload):
+                    while len(payload) < length:
+                        additional_data = self.request.recv(2048)
+                        bytes_read += 2048
+                        received_data += (additional_data)
+                        frame = util.websockets.parse_ws_frame(received_data)
+                        fin = frame.fin_bit
+                        length = frame.payload_length
+                        payload = frame.payload
+                    
+                    # we read too much and we have to save
+                if bytes_read > (length + 8):
+                    extra_data = received_data[length+8:]
+                
                 print(f"payload : {payload}")
 
-                # check if all frame shave been recived
-                if len(payload) >= length:
-                    if frame.opcode == 0x8:
-                        return
-                    
-                    received_data = received_data[length:]
+                final += payload
+                if(fin == 1):
+                    is_end = True
+            
+            decoded = final.decode()
+            dict = json.loads(decoded.replace("'", '"'))
+            if dict.get('messageType') == "chatMessage":
+                self.ws_send_mesage(dict,username)
 
-                else:
-                    break
+            message_type = dict.get('messageType')
+            message = dict.get('message')
+            print(f"message = {message}")
+            print(f"messsage type = {message_type}")
+            print(f"username = {username}")
                 
+    def ws_send_mesage(self,dict,username):
+        message = html.escape(dict.get('message'))
+        all_data = list(MyTCPHandler.chat_collection.find({}))
+        if(len(all_data)  > 0):
+            temp = all_data[len(all_data)-1]
+            self.message_id = int(temp["id"])
+        else:
+            self.message_id = 0
 
+        temp = int(self.message_id) + 1 
+        data = {"message": message,"username": username,"id": temp}
+
+        self.chat_collection.insert_one(data)
+
+        data.pop("_id")
+
+        dict = {}
+        dict["messageType"] = "chatMessage"
+        dict["chatMessage"] = message
+        dict["message"] = message
+        dict["id"] = temp
+        dict = json.dumps(dict)
+        frame = util.websockets.generate_ws_frame(dict.encode())
+
+        for users in self.websocket_users:
+            print(f"{message} sent to {users}")
+            users.sendall(frame)
                     
-                    
-
-
-
-
 
     def handle(self):
         self.setup_router()
