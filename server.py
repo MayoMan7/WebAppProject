@@ -651,8 +651,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             for client in self.websocket_users.keys():
                 if self.websocket_users[client] != username:
                     client.sendall(frame)
-
-
+                    
         self.websocket_loop(request,username)
 
 
@@ -678,14 +677,14 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                     self.websocket_users.pop(self.request)
                     print(f"users = {self.websocket_users}")
 
-                    if(username != "Guest"):
-                        for users in self.websocket_users.keys():
-                            login_msg = {}
-                            login_msg["messageType"] = "logout"
-                            login_msg["username"] = username
-                            login_msg = json.dumps(login_msg)
-                            frame = util.websockets.generate_ws_frame(login_msg.encode())
-                            users.sendall(frame)
+                    
+                    for users in self.websocket_users.keys():
+                        login_msg = {}
+                        login_msg["messageType"] = "logout"
+                        login_msg["username"] = username
+                        login_msg = json.dumps(login_msg)
+                        frame = util.websockets.generate_ws_frame(login_msg.encode())
+                        users.sendall(frame)
                     break
 
                 fin = frame.fin_bit
