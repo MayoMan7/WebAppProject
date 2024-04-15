@@ -45,19 +45,28 @@ function chatMessageHTML(messageJSON) {
     return messageHTML;
 }
 
+function dm(){
+    const chatTextBox = document.getElementById("chat-text-box");
+    const message = chatTextBox.value;
+    chatTextBox.value = "";
+    var dropdown = document.getElementById("userlist");
+    var selectedOption = dropdown.options[dropdown.selectedIndex];
+    var selectedValue = selectedOption.value;
+    if (ws) {
+        // Using WebSockets
+        socket.send(JSON.stringify({'messageType': 'DM', 'message': message, "To": selectedValue}));
+    }
+    console.log("dm called");
+    chatTextBox.focus();
+}
+
 function loginHTML(messageJSON) {
     console.log(messageJSON)
     const username = messageJSON.username;
-    let messageHTML = "<p>"+ username +" has logged in</p>";
+    let messageHTML = "<option value=" + username + ">" + username + "</option>";
     return messageHTML;
 }
 
-function logoutHTML(messageJSON) {
-    console.log(messageJSON)
-    const username = messageJSON.username;
-    let messageHTML = "<p>"+ username +" has logged out</p>";
-    return messageHTML;
-}
 
 function clearChat() {
     const chatMessages = document.getElementById("chat-messages");
@@ -74,15 +83,17 @@ function addMessageToChat(messageJSON) {
 function login(messageJSON){
     const user = document.getElementById("userlist");
     user.innerHTML += loginHTML(messageJSON);
-    chatMessages.scrollIntoView(false);
-    chatMessages.scrollTop = chatMessages.scrollHeight - chatMessages.clientHeight;
 }
 
 function logout(messageJSON){
-    const user = document.getElementById("userlist");
-    user.innerHTML += logoutHTML(messageJSON);
-    chatMessages.scrollIntoView(false);
-    chatMessages.scrollTop = chatMessages.scrollHeight - chatMessages.clientHeight;
+    var dropdown = document.getElementById("userlist");
+    const username = messageJSON.username;
+    var optionToRemove = dropdown.querySelector("option[value='"+ username + "']");
+    
+    // Remove the option
+    if (optionToRemove) {
+        dropdown.removeChild(optionToRemove);
+    }
 }
 
 function sendChat() {

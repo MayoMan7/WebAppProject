@@ -30,7 +30,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     client_id = os.getenv("CLIENT_ID")
     client_secret = os.getenv("CLIENT_SECRET")
     
-    websocket_users = []
+    websocket_users = {}
 
 
 
@@ -223,7 +223,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     def recive_messaege(self,request):
         data = json.loads(request.body)
         xsrf_token = data.get("xsrf_token")
-        username = "guest"
+        username = "Guest"
         data = html.escape(data["message"])
         if "auth_token" in request.cookies:
             token = request.cookies["auth_token"]
@@ -308,7 +308,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         if(message == None):
             return self.bad_responce(request)
 
-        username = "guest"
+        username = "Guest"
         if "auth_token" in request.cookies:
             token = request.cookies["auth_token"]
             hashed_token = hashlib.sha256(token.encode()).hexdigest()
@@ -569,7 +569,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 with open(os.path.join(image_directory, image_filename), "wb") as f:
                     f.write(image_content)
                 data = '<video width="400" controls autoplay muted><source src="' + os.path.join(image_directory, image_filename) +'" type="video/mp4"></video>'
-            username = "guest"
+            username = "Guest"
             if "auth_token" in request.cookies:
                 token = request.cookies["auth_token"]
                 hashed_token = hashlib.sha256(  token.encode()).hexdigest()
@@ -613,9 +613,10 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         responce +=f"Sec-WebSocket-Accept: {key}\r\n"
         responce += "X-Content-Type-Options: nosniff\r\n\r\n"
         self.request.sendall(responce.encode())
-        self.websocket_users.append(self.request)
+        self.websocket_users[self.request] = username
         if username != "Guest":
-            for users in self.websocket_users:
+            for users in self.websocket_users.keys():
+                print(users)
                 login_msg = {}
                 login_msg["messageType"] = "logon"
                 login_msg["username"] = username
@@ -644,9 +645,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 opcode = frame.opcode
 
                 if opcode == 0x08:
-                    self.websocket_users.remove(self.request)
+                    self.websocket_users.pop(self.request)
                     if(username != "Guest"):
-                        for users in self.websocket_users:
+                        for users in self.websocket_users.keys():
                             login_msg = {}
                             login_msg["messageType"] = "logout"
                             login_msg["username"] = username
@@ -658,9 +659,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 fin = frame.fin_bit
                 length = frame.payload_length
                 payload = frame.payload
-                if frame.opcode == 0x8:
-                    self.websocket_users.remove(self.request)
-                    break
+                
 
                 # this is where we buffer
                 if bytes_read < len(payload):
@@ -696,12 +695,36 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             dict = json.loads(decoded.replace("'", '"'))
             if dict.get('messageType') == "chatMessage":
                 self.ws_send_mesage(dict,username)
+            if dict.get('messageType') == "DM":
+                self.ws_DM(dict,username)
 
             message_type = dict.get('messageType')
             message = dict.get('message')
             print(f"message = {message}")
             print(f"messsage type = {message_type}")
             print(f"username = {username}")
+
+    def ws_DM(self,dict,username):
+        message = dict["message"]
+        dest_val = dict["To"]
+        for key in self.websocket_users.keys():
+            if self.websocket_users[key] == dest_val:
+                dest_key = key
+        dict = {}
+        dict["messageType"] = "chatMessage"
+        dict["username"] = username
+        dict["message"] = message + ": DM by " + username
+        dict["id"] = 0
+        dict = json.dumps(dict)
+        frame = util.websockets.generate_ws_frame(dict.encode())
+
+        self.request.sendall(frame)
+        print(self.websocket_users)
+        
+        dest_key.sendall(frame)
+
+
+
 
 
     def ws_send_mesage(self,dict,username):
@@ -728,7 +751,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         dict = json.dumps(dict)
         frame = util.websockets.generate_ws_frame(dict.encode())
 
-        for users in self.websocket_users:
+        for users in self.websocket_users.keys():
             print(f"{message} sent to {users}")
             users.sendall(frame)
                     
