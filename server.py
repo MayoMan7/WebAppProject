@@ -22,6 +22,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
     mongo_client = MongoClient("mongo")
     db = mongo_client["cse312"]
     chat_collection = db["chat"]
+    dm_collection = db["dm"]
     accounts = db["accounts"]
     message_id = 0
     count = 0
@@ -84,11 +85,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             print("no valid auth token")
             index = body.find('"/logout"') + len('"/logout"')
             body = body[:index] + " hidden " + body[index:]
-
-
-                
-        
-
         
         bytes = len(body)
         responce +="Content-Length: " + str(bytes) + "\r\n\r\n" + body
@@ -264,6 +260,27 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             dict["username"] = entry["username"]
             dict["id"] = entry["id"]
             body.append(dict) 
+
+        dms = self.dm_collection.find({})
+        
+        username = "Guest"
+        if "auth_token" in request.cookies:
+            token = request.cookies["auth_token"]
+            hashed_token = hashlib.sha256(token.encode()).hexdigest()
+            account = self.accounts.find_one({"hashed_token": hashed_token})
+            if account != None:
+                username = account["username"]
+        
+
+        for entry in dms:
+            print(entry)
+            if username == entry["to"] or username == entry["from"]:
+                dict = {}
+                dict["message"] = entry["message"]
+                dict["username"] = entry["username"]
+                dict["id"] = entry["id"]
+                body.append(dict) 
+        
 
         body = json.dumps(body)
         bytes = len(body)
@@ -602,7 +619,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 username = account["username"]
 
         
-        print(request)
         key = request.headers["Sec-WebSocket-Key"]
         key = util.websockets.compute_accept(key)
         
@@ -614,16 +630,27 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         responce += "X-Content-Type-Options: nosniff\r\n\r\n"
         self.request.sendall(responce.encode())
         self.websocket_users[self.request] = username
-        if username != "Guest":
-            for users in self.websocket_users.keys():
-                print(users)
+        for users in self.websocket_users.keys():
+            print(f'socket = {users}, person = {self.websocket_users[users]}')
+        # sending evryone to me
+        for names in self.websocket_users.values():
+            if names != "Guest":
                 login_msg = {}
                 login_msg["messageType"] = "logon"
-                login_msg["username"] = username
+                login_msg["username"] = names
                 login_msg = json.dumps(login_msg)
                 frame = util.websockets.generate_ws_frame(login_msg.encode())
-                users.sendall(frame)
-            
+                self.request.sendall(frame)
+        # sending my thing to everyone
+        if username != "Guest":
+            login_msg = {}
+            login_msg["messageType"] = "logon"
+            login_msg["username"] = username
+            login_msg = json.dumps(login_msg)
+            frame = util.websockets.generate_ws_frame(login_msg.encode())
+            for client in self.websocket_users.keys():
+                client.sendall(frame)
+
 
         self.websocket_loop(request,username)
 
@@ -645,7 +672,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 opcode = frame.opcode
 
                 if opcode == 0x08:
+                    print(f"closing conection")
+                    print(f"users = {self.websocket_users}")
                     self.websocket_users.pop(self.request)
+                    print(f"users = {self.websocket_users}")
+
                     if(username != "Guest"):
                         for users in self.websocket_users.keys():
                             login_msg = {}
@@ -654,7 +685,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                             login_msg = json.dumps(login_msg)
                             frame = util.websockets.generate_ws_frame(login_msg.encode())
                             users.sendall(frame)
-                    return()
+                    break
 
                 fin = frame.fin_bit
                 length = frame.payload_length
@@ -680,12 +711,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                     frameLength += 6
 
                 if bytes_read > (frameLength):
-                    print(f"frame length = {frameLength}")
-                    print(f"recived data = {received_data}")
                     extra_data = received_data[frameLength:]
-                    print(f"extra data = {extra_data}")
                 
-                print(f"payload : {payload}")
 
                 final += payload
                 if(fin == 1):
@@ -700,26 +727,42 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
             message_type = dict.get('messageType')
             message = dict.get('message')
-            print(f"message = {message}")
-            print(f"messsage type = {message_type}")
-            print(f"username = {username}")
+            
 
     def ws_DM(self,dict,username):
-        message = dict["message"]
+        message = html.escape(dict.get('message')) + ": DM by " + username
         dest_val = dict["To"]
+        dest_key = ""
         for key in self.websocket_users.keys():
             if self.websocket_users[key] == dest_val:
                 dest_key = key
+
+        all_data = list(MyTCPHandler.dm_collection.find({}))
+        if(len(all_data)  > 0):
+            temp = all_data[len(all_data)-1]
+            id = int(temp["id"])
+        else:
+            id = 0
+
+        temp = int(id) + 1 
+        data = {"message": message,"username": username,"id": id, "to": self.websocket_users[self.request], "from": dest_val}
+        print(f"data im adding to data base {data}")
+
+
+
+        self.dm_collection.insert_one(data)
+
+        data.pop("_id")
         dict = {}
         dict["messageType"] = "chatMessage"
         dict["username"] = username
-        dict["message"] = message + ": DM by " + username
-        dict["id"] = 0
+        dict["message"] = message
+        dict["id"] = id
         dict = json.dumps(dict)
         frame = util.websockets.generate_ws_frame(dict.encode())
 
         self.request.sendall(frame)
-        print(self.websocket_users)
+        
         
         dest_key.sendall(frame)
 
