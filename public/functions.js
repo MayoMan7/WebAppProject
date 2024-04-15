@@ -11,7 +11,14 @@ function initWS() {
         const messageType = message.messageType
         if(messageType === 'chatMessage'){
             addMessageToChat(message);
-        }else{
+        }
+        if(messageType === 'logon'){
+            login(message);
+        }
+        if(messageType === 'logout'){
+            logout(message)
+        }
+        else{
             // send message to WebRTC
             processMessageAsWebRTC(message, messageType);
         }
@@ -38,6 +45,20 @@ function chatMessageHTML(messageJSON) {
     return messageHTML;
 }
 
+function loginHTML(messageJSON) {
+    console.log(messageJSON)
+    const username = messageJSON.username;
+    let messageHTML = "<p>"+ username +" has logged in</p>";
+    return messageHTML;
+}
+
+function logoutHTML(messageJSON) {
+    console.log(messageJSON)
+    const username = messageJSON.username;
+    let messageHTML = "<p>"+ username +" has logged out</p>";
+    return messageHTML;
+}
+
 function clearChat() {
     const chatMessages = document.getElementById("chat-messages");
     chatMessages.innerHTML = "";
@@ -46,6 +67,20 @@ function clearChat() {
 function addMessageToChat(messageJSON) {
     const chatMessages = document.getElementById("chat-messages");
     chatMessages.innerHTML += chatMessageHTML(messageJSON);
+    chatMessages.scrollIntoView(false);
+    chatMessages.scrollTop = chatMessages.scrollHeight - chatMessages.clientHeight;
+}
+
+function login(messageJSON){
+    const user = document.getElementById("userlist");
+    user.innerHTML += loginHTML(messageJSON);
+    chatMessages.scrollIntoView(false);
+    chatMessages.scrollTop = chatMessages.scrollHeight - chatMessages.clientHeight;
+}
+
+function logout(messageJSON){
+    const user = document.getElementById("userlist");
+    user.innerHTML += logoutHTML(messageJSON);
     chatMessages.scrollIntoView(false);
     chatMessages.scrollTop = chatMessages.scrollHeight - chatMessages.clientHeight;
 }

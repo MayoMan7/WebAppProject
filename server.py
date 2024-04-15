@@ -614,6 +614,16 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         responce += "X-Content-Type-Options: nosniff\r\n\r\n"
         self.request.sendall(responce.encode())
         self.websocket_users.append(self.request)
+        if username != "Guest":
+            for users in self.websocket_users:
+                login_msg = {}
+                login_msg["messageType"] = "logon"
+                login_msg["username"] = username
+                login_msg = json.dumps(login_msg)
+                frame = util.websockets.generate_ws_frame(login_msg.encode())
+                users.sendall(frame)
+            
+
         self.websocket_loop(request,username)
 
 
@@ -632,6 +642,19 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             while not is_end:
                 frame = util.websockets.parse_ws_frame(received_data)
                 opcode = frame.opcode
+
+                if opcode == 0x08:
+                    self.websocket_users.remove(self.request)
+                    if(username != "Guest"):
+                        for users in self.websocket_users:
+                            login_msg = {}
+                            login_msg["messageType"] = "logout"
+                            login_msg["username"] = username
+                            login_msg = json.dumps(login_msg)
+                            frame = util.websockets.generate_ws_frame(login_msg.encode())
+                            users.sendall(frame)
+                    return()
+
                 fin = frame.fin_bit
                 length = frame.payload_length
                 payload = frame.payload
@@ -651,8 +674,17 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                         payload = frame.payload
                     
                     # we read too much and we have to save
-                if bytes_read > (length + 8):
-                    extra_data = received_data[length+8:]
+                frameLength = length + 6 # To account for the first few headers
+                if frameLength >= 126 and frameLength < 65536:
+                    frameLength += 2
+                elif frameLength >= 65536:
+                    frameLength += 6
+
+                if bytes_read > (frameLength):
+                    print(f"frame length = {frameLength}")
+                    print(f"recived data = {received_data}")
+                    extra_data = received_data[frameLength:]
+                    print(f"extra data = {extra_data}")
                 
                 print(f"payload : {payload}")
 
@@ -670,7 +702,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             print(f"message = {message}")
             print(f"messsage type = {message_type}")
             print(f"username = {username}")
-                
+
+
     def ws_send_mesage(self,dict,username):
         message = html.escape(dict.get('message'))
         all_data = list(MyTCPHandler.chat_collection.find({}))
@@ -689,7 +722,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         dict = {}
         dict["messageType"] = "chatMessage"
-        dict["chatMessage"] = message
+        dict["username"] = username
         dict["message"] = message
         dict["id"] = temp
         dict = json.dumps(dict)
