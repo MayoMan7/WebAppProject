@@ -19,6 +19,15 @@ class Router:
                     if request.path.startswith(path):
                         return action(request, handler) 
 
-        response_404 = ("HTTP/1.1 404 Not Found\r\n""Content-Type: text/plain\r\n""Content-Length: 15\r\n""\r\n""404 Not Found")
+        body = "404 Not Found"
+        response_404 = (
+            "HTTP/1.1 404 Not Found\r\n"
+            "Content-Type: text/plain\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "X-Content-Type-Options: nosniff\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            f"{body}"
+        )
 
         handler.request.sendall(response_404.encode())

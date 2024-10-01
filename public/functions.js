@@ -112,8 +112,29 @@ function chatMessageHTML(messageJSON) {
     const username = messageJSON.username;
     const message = messageJSON.message;
     const messageId = messageJSON.id;
-    let messageHTML = "<div id='message_" + messageId + "'><button onclick='deleteMessage(\"" + messageId + "\")'>X</button> ";
+    const msg_cookie = messageJSON.browser_cookie;
+
+    let temp = document.cookie;
+    let browser_cookie = ""
+    let cookies = temp.split("; ");
+    for (let i of cookies) {
+        const [key, value] = i.split("=");
+        if (key == "browser_cookie"){
+            browser_cookie = value;
+            
+        }
+    }
+    console.log(temp);
+
+    if (browser_cookie == msg_cookie){
+        console.log("YOUR THE ONE HARRY")
+    }
+
+    let messageHTML = "<div id='message_" + messageId + "' style='color: white;'><button onclick='deleteMessage(\"" + messageId + "\")'>X</button> ";
     messageHTML += "<b>" + username + "</b>: " + message + "</div>";
+    if (browser_cookie == msg_cookie){
+        messageHTML = messageHTML.replace("color: white;", "color: orange;");
+    }
     return messageHTML;
 }
 

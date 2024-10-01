@@ -10,7 +10,6 @@ class Request:
         self.headers = {}
         self.cookies = {}
         for header in lines[1:]: # the second line to the 3rd to last line
-            print(header)
             if header == b"":
                 continue 
             if header.split(b":",1)[0].decode() == "Cookie":
