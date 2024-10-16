@@ -32,6 +32,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         # print("--- end of data ---\n\n")
         request = Request(received_data)
         print(request.path)
+        if request.path == "/register":
+            print(request.body)
 
         self.router.route_request(request, self)
 
