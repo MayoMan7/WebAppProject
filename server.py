@@ -4,6 +4,8 @@ from util.router import Router
 from util.hello_path import hello_path
 from hosting_files import *
 from chat import *
+from authentication import *
+from spotify import *
 
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
@@ -21,6 +23,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("POST", "/chat-messages", receive_message, True)
         self.router.add_route("GET", "/chat-messages", send_messages, True)
         self.router.add_route("DELETE", "/chat-messages/", delete_messages, False)
+        self.router.add_route("POST", "/register", register, True)
+        self.router.add_route("POST", "/login", login, True)
+        self.router.add_route("POST", "/logout", logout, True )
+        self.router.add_route("GET", "/spotify-login", get_code, False)
+        self.router.add_route("GET", "/spotify", get_access, False)
 
         super().__init__(request, client_address, server)
 
@@ -33,6 +40,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         request = Request(received_data)
         print(request.path)
         if request.path == "/register":
+            print("register")
             print(request.body)
 
         self.router.route_request(request, self)

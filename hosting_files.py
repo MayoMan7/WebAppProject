@@ -1,4 +1,11 @@
+import hashlib
 import uuid
+import os
+from pymongo import MongoClient
+
+client = MongoClient("mongo:27017")
+db_client = client["user_database"]
+user__collection = db_client["user"]
 
 # router function for sending html code
 def host_html(request, handler):
@@ -16,6 +23,8 @@ def host_html(request, handler):
         with open(path,"r") as file:
             body = file.read()
             body = body.replace("{{visits}}", str(visit_count))
+            body = loginlogout(body,request)
+            body = gen_xsrf(body)
             content_len = len(body.encode())
             response = (
             "HTTP/1.1 200 OK\r\n"
@@ -30,6 +39,58 @@ def host_html(request, handler):
     except:
         response = ("HTTP/1.1 404 Not Found\r\n""Content-Type: text/plain\r\n""Content-Length: 15\r\n""\r\n""404 Not Found")
     handler.request.sendall(response.encode())
+
+
+def gen_xsrf(body):
+
+    to_replace = "{{token_placeholder}}"
+    xsrf_token = os.urandom(32).hex()
+    body = body.replace(to_replace,xsrf_token)
+    
+    return body
+
+def loginlogout(body,request):
+    
+    to_replace = "{{login/logout}}"
+    login_html = """
+    Login:
+        <form action="/login" method="post" enctype="application/x-www-form-urlencoded">
+            <label>Username:
+                <input type="text" name="username"/>
+            </label>
+            <br/>
+            <label>Password:&nbsp;
+                <input type="password" name="password">
+            </label>
+            <input type="submit" value="Post">
+        </form>
+    """
+    
+    logout_html = """
+    Logout:
+        <form action="/logout" method="post" enctype="application/x-www-form-urlencoded">
+            <input type="submit" value="Post">
+        </form>
+    """
+    
+    print(to_replace in body)
+
+
+    token = request.cookies.get("auth_token")
+    print(f"WE ARE TRYING TO REPLACE, TOKEN = {token}")
+    if token:
+        token = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        user = user__collection.find_one({"auth_token": token})
+        print(user)
+        if user:
+            body = body.replace(to_replace,logout_html)
+            to_replace = "{{token_placeholder}}"
+            xsrf_token = os.urandom(32).hex()
+            body = body.replace(to_replace,xsrf_token)
+            user__collection.update_one({"auth_token": token},{"$set": {"xsrf_token": xsrf_token}})
+            return body
+    body = body.replace(to_replace,login_html)
+    return body
 
 # router function for sending css code
 def host_css(request, handler):
@@ -103,7 +164,7 @@ def host_images(request, handler):
             "X-Content-Type-Options: nosniff\r\n"
             "\r\n"
             ).format(content_len,body)
-            handler.request.sendall(response.encode('utf-8'))
+            handler.request.sendall(response.encode("utf-8"))
             handler.request.sendall(body)
     except:
         response = ("HTTP/1.1 404 Not Found\r\n""Content-Type: text/plain\r\n""Content-Length: 15\r\n""\r\n""404 Not Found")
@@ -122,7 +183,7 @@ def host_favicon(request, handler):
             "X-Content-Type-Options: nosniff\r\n"
             "\r\n"
             ).format(content_len,body)
-            handler.request.sendall(response.encode('utf-8'))
+            handler.request.sendall(response.encode("utf-8"))
             handler.request.sendall(body)
     except:
         response = ("HTTP/1.1 404 Not Found\r\n""Content-Type: text/plain\r\n""Content-Length: 15\r\n""\r\n""404 Not Found")

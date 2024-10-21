@@ -8,6 +8,9 @@ services:
     build: .
     environment:
       WAIT_HOSTS: mongo:27017
+      CLIENT_ID: "" # add your secret
+      CLIENT_SECRET: "" # add your secret
+      REDIRECT_URI: "http://localhost:8080/spotify" 
     ports:
       - '8080:8080'
     command: python -u server.py

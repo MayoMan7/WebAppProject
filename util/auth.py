@@ -1,18 +1,12 @@
 def extract_credentials(request):
-#     /register
-    temp = b'username=itachi911&password=312God%21%21'
-    body = temp.decode()
-    # body = request.body.decode()
+    body = request.body.decode()
     username = body.split("&")[0].split("=")[1]
     password = body.split("&")[1].split("=")[1]
-
     percent_encodings = {
         "%21": "!",
         "%40": "@",
         "%23": "#",
         "%24": "$",
-        "%25": "%",
-        "%5E": "^",
         "%26": "&",
         "%28": "(",
         "%29": ")",
@@ -22,15 +16,19 @@ def extract_credentials(request):
     }
     for i in percent_encodings:
         password = password.replace(i,percent_encodings[i])
-    print(validate_password(password))
+    password = password.replace("%25","%")
+    print(password)
     return [username,password]
-    
     
 
 def validate_password(password):
     special_chars = ['!', '@', '#', '$', '%', '^', '&', '(', ')', '-', '_', '=']
     if len(password) < 8:
         return False
+    # print(char.islower() for char in password)
+    # print("SOMTHING TIME")
+    # for i in (char.islower() for char in password):
+    #     print(i)
     if not any(char.islower() for char in password):
         return False
     if not any(char.isupper() for char in password):
@@ -43,4 +41,3 @@ def validate_password(password):
         return False
     return True
 
-extract_credentials("temp")
