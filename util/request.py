@@ -2,7 +2,14 @@ class Request:
 
     def __init__(self, request: bytes):
         # TODO: parse the bytes of the request and populate the following instance variables
-        lines, self.body = (request.split(b"\r\n\r\n"))
+        # print("XXXXXXXXXXXXXXXXXXXXXXXXXXX")
+        # for i in request.split(b"\r\n\r\n",1):
+        #     print(i)
+        # print(f"LEN = {len(request.split(b"\r\n\r\n",1))}")
+
+        lines, self.body = (request.split(b"\r\n\r\n",1))
+        # print("---------------")
+        # print(lines)
         lines = lines.split(b"\r\n")
         self.method = lines[0].split(b" ")[0].decode()
         self.path = lines[0].split(b" ")[1].decode()
