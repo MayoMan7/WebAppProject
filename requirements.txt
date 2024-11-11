@@ -1,3 +1,5 @@
 pymongo
 bcrypt
 requests
+pillow
+ffmpeg

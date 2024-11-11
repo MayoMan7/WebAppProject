@@ -73,15 +73,15 @@ def loginlogout(body,request):
         </form>
     """
     
-    print(to_replace in body)
+    # print(to_replace in body)
 
 
     token = request.cookies.get("auth_token")
-    print(f"WE ARE TRYING TO REPLACE, TOKEN = {token}")
+    # print(f"WE ARE TRYING TO REPLACE, TOKEN = {token}")
     if token:
         token = hashlib.sha256(token.encode("utf-8")).hexdigest()
         user = user__collection.find_one({"auth_token": token})
-        print(user)
+        # print(user)
         if user:
             body = body.replace(to_replace,logout_html)
             to_replace = "{{token_placeholder}}"
@@ -94,10 +94,10 @@ def loginlogout(body,request):
 
 # router function for sending css code
 def host_css(request, handler):
-    print("WE WANT CSS")
+    # print("WE WANT CSS")
     path = "public/style.css"
     try:
-        print("WE SHOULD HAVE GOT CSS")
+        # print("WE SHOULD HAVE GOT CSS")
         with open(path,"r") as file:
             body = file.read()
             content_len = len(body.encode())
@@ -153,6 +153,14 @@ def host_webrtc(request, handler):
 
 def host_images(request, handler):
     path = request.path[1:]
+    filename = path.split("public/image/")[1]
+    filename = filename.replace("/","")
+    filetype = filename.split(".")[1]
+    if filetype == "mp4":
+        mimetype = f"video/{filetype}"
+    else:
+        mimetype = f"image/{filetype}"
+    path = f"public/image/{filename}"
     try:
         with open(path,"rb") as file:
             body = file.read()
@@ -160,10 +168,10 @@ def host_images(request, handler):
             response = (
             "HTTP/1.1 200 OK\r\n"
             "Content-Length: {}\r\n"
-            "Content-Type: image/jpeg\r\n"
+            "Content-Type: {}\r\n"
             "X-Content-Type-Options: nosniff\r\n"
             "\r\n"
-            ).format(content_len,body)
+            ).format(content_len,mimetype,body)
             handler.request.sendall(response.encode("utf-8"))
             handler.request.sendall(body)
     except:

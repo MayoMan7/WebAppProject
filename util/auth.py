@@ -17,7 +17,7 @@ def extract_credentials(request):
     for i in percent_encodings:
         password = password.replace(i,percent_encodings[i])
     password = password.replace("%25","%")
-    print(password)
+    # print(password)
     return [username,password]
     
 
