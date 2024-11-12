@@ -6,7 +6,6 @@ def compute_accept(key):
     key+= GUID
     return base64.b64encode(hashlib.sha1(key.encode()).digest()).decode("utf-8")
 
-
 class Frame:
     def __init__(self,fin_bit,opcode,payload_length,payload):
         self.fin_bit = fin_bit
@@ -20,7 +19,9 @@ def parse_ws_frame(bytes):
     print(f"fin bit = {fin_bit}")
     print(f"opcode = {opcode}")
     mask_bit = (bytes[1] & 128)>> 7
+    print(f"mask bit = {mask_bit}")
     len = (bytes[1] & 127)
+    payload_length = len
     next_byte = 2
     if len == 126:
         payload_length = (bytes[2] << 8) | bytes[3]
@@ -45,13 +46,34 @@ def parse_ws_frame(bytes):
 
 
 def generate_ws_frame(bytes):
+    frame = b""
+    content_len = len(bytes)
+    # content_len = 18446744073709551614 # testing
     first_byte = 0b10000001
-    print(first_byte.to_bytes(1,"big"))
+    frame += first_byte.to_bytes(1,"big")
+    second_byte = 0b00000000
+    if content_len < 126:
+        second_byte |= content_len
+        frame += second_byte.to_bytes(1,"big")
+    if content_len == 126:
+        second_byte |= content_len
+        frame += second_byte.to_bytes(1,"big")
+        next_bytes = 0b0000000000000000
+        next_bytes |= content_len
+        frame += next_bytes.to_bytes(2,"big")
+    if content_len > 126:
+        second_byte |= 127
+        frame += second_byte.to_bytes(1,"big")
+        next_bytes = 0b0000000000000000000000000000000000000000000000000000000000000000
+        next_bytes |= content_len
+        frame += next_bytes.to_bytes(8,"big")
+    frame += bytes
+    return frame
     
 
-generate_ws_frame("temp")
+print(generate_ws_frame(b"TEST"))
 
+# fin bit = 1, opcode = 1 mask = 0, len = 4
+parse_ws_frame(b'\x81\x04TEST')
 
-
-# Test Compute
-# print(f" Testing compute_accept: {compute_accept('6dvvbSIGRQF/+IFgdB9nxw==') == '3QyF2DAlHFXVL00GOq9fyBQHotc='}")
+print(compute_accept("D12+CDq1GMcX8NNQZRE/GQ==") == "pwi4T2+FJkdUgam0CMHGpniT88k=")
