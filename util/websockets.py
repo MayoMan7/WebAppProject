@@ -55,13 +55,13 @@ def generate_ws_frame(bytes):
     if content_len < 126:
         second_byte |= content_len
         frame += second_byte.to_bytes(1,"big")
-    if content_len == 126:
-        second_byte |= content_len
+    if content_len >= 126 and content_len < 65536:
+        second_byte |= 126
         frame += second_byte.to_bytes(1,"big")
         next_bytes = 0b0000000000000000
         next_bytes |= content_len
         frame += next_bytes.to_bytes(2,"big")
-    if content_len > 126:
+    if content_len >= 65536:
         second_byte |= 127
         frame += second_byte.to_bytes(1,"big")
         next_bytes = 0b0000000000000000000000000000000000000000000000000000000000000000
@@ -69,11 +69,9 @@ def generate_ws_frame(bytes):
         frame += next_bytes.to_bytes(8,"big")
     frame += bytes
     return frame
-    
 
-print(generate_ws_frame(b"TEST"))
+print(generate_ws_frame(b"A"*126))
 
-# fin bit = 1, opcode = 1 mask = 0, len = 4
 parse_ws_frame(b'\x81\x04TEST')
 
 print(compute_accept("D12+CDq1GMcX8NNQZRE/GQ==") == "pwi4T2+FJkdUgam0CMHGpniT88k=")

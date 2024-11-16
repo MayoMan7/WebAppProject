@@ -3,7 +3,7 @@ ENV HOME /root
 ENV MONGO_URI mongodb://localhost:27017
 WORKDIR /root
 COPY . .
-RUN apt-get update && apt-get install -y ffmpeg
+# RUN apt-get update && apt-get install -y ffmpeg
 # Download dependancies
 RUN pip3 install -r requirements.txt
 EXPOSE 8080

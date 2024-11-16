@@ -7,7 +7,7 @@ from chat import *
 from authentication import *
 from spotify import *
 from media import *
-
+from sockets import *
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
 
@@ -30,6 +30,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("GET", "/spotify-login", get_code, False)
         self.router.add_route("GET", "/spotify", get_access, False)
         self.router.add_route("POST", "/media-uploads", upload, True)
+        self.router.add_route("GET", "/websocket", handshake, True)
+
+
 
         super().__init__(request, client_address, server)
 
