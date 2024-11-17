@@ -16,10 +16,10 @@ class Frame:
 def parse_ws_frame(bytes):
     fin_bit = (bytes[0] & 128)>> 7
     opcode = (bytes[0] & 15)
-    print(f"fin bit = {fin_bit}")
-    print(f"opcode = {opcode}")
+    # print(f"fin bit = {fin_bit}")
+    # print(f"opcode = {opcode}")
     mask_bit = (bytes[1] & 128)>> 7
-    print(f"mask bit = {mask_bit}")
+    # print(f"mask bit = {mask_bit}")
     len = (bytes[1] & 127)
     payload_length = len
     next_byte = 2
@@ -29,11 +29,11 @@ def parse_ws_frame(bytes):
     if len == 127:
         payload_length = ((bytes[2] << 56) | (bytes[3] << 48) | (bytes[4] << 40) | (bytes[5] << 32) | (bytes[6] << 24) | (bytes[7] << 16) | (bytes[8] << 8) |bytes[9])
         next_byte = 10
-    print(f"real_len = {payload_length}")
+    # print(f"real_len = {payload_length}")
     if mask_bit == 1:
         masking_key = bytes[next_byte:next_byte+4]
         next_byte = next_byte+4
-        print(f"masking_key = {masking_key.hex()}")
+        # print(f"masking_key = {masking_key.hex()}")
     payload = bytes[next_byte:]
     if mask_bit == 1:
         unmasked = b""
@@ -41,7 +41,7 @@ def parse_ws_frame(bytes):
             unmasked += (payload[i] ^ masking_key[i % 4]).to_bytes(1,"big")
         payload = unmasked
 
-    print(f"payload = {payload}")
+    # print(f"payload = {payload}")
     return Frame(fin_bit,opcode,payload_length,payload)
 
 
@@ -70,8 +70,8 @@ def generate_ws_frame(bytes):
     frame += bytes
     return frame
 
-print(generate_ws_frame(b"A"*126))
+# print(generate_ws_frame(b"A"*126))
 
-parse_ws_frame(b'\x81\x04TEST')
+# parse_ws_frame(b'\x81\x04TEST')
 
-print(compute_accept("D12+CDq1GMcX8NNQZRE/GQ==") == "pwi4T2+FJkdUgam0CMHGpniT88k=")
+# print(compute_accept("D12+CDq1GMcX8NNQZRE/GQ==") == "pwi4T2+FJkdUgam0CMHGpniT88k=")

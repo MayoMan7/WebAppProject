@@ -60,9 +60,6 @@ def receive_message(requst,handler):
 
             handler.request.sendall(response_403.encode())
             return
-
-
-
     message = escape(message_json["message"])
     
     browser_cookie = requst.cookies["browser_cookie"]
@@ -85,6 +82,20 @@ def receive_message(requst,handler):
             "{}"
             ).format(content_len,body)
     handler.request.sendall(response.encode())
+
+def save_message(username,message, browser_cookie):
+    message_data = {
+        "username": username,
+        "message": message,
+        "browser_cookie": browser_cookie
+    }
+    saved = chat__collection.insert_one(message_data)
+    id = str(saved.inserted_id)
+    # print(id)
+    return id
+
+
+
 
 
 def receive_image(requst,handler,filename):
