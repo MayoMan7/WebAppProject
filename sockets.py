@@ -27,6 +27,7 @@ def handshake(request,handler):
         f"Sec-WebSocket-Accept: {key}\r\n"
         "\r\n"
     )
+
     handler.request.sendall(response.encode())
     active_clients.append(handler)
 
@@ -36,7 +37,7 @@ def handshake(request,handler):
         data = handler.request.recv(2048)
         print("RECIVING")
         if not data:
-            print("BREAKING LOOP")
+            # print("BREAKING LOOP")
             break
         total_data += data
         while total_data != b"":
@@ -52,27 +53,36 @@ def handshake(request,handler):
             payload_len = frame.payload_length
             # print(f"The len of all the data i have recived {len(total_data)}")
             # print(f"the len of the frame I should be parsing {frame_size}")
-            # adjusting data
             total_data = total_data[frame_size:]
-            print(f"finbit {finbit} opcode {opcode} payload_len {payload_len}")
-            # closing conection
+            # print(f"finbit {finbit}") 
+            # print(f"opcode {opcode}")
+            # print(f"payload_len {payload_len}")
+
+            # ISSUE
             if opcode == 8:
+
+                # wht i had before
+                # active_clients.remove(handler)
+                # break   
+
                 print("CLOSING CONECTION")
                 active_clients.remove(handler)
-                break
+                handler.request.close()
+                print('DISCONECTED NO MORE DATA')
+                return
             if finbit == 0:
                 continuation_payload += frame.payload
                 continue
             if finbit == 1:
                 if opcode == 0:
                     continuation_payload += frame.payload
-                    print(continuation_payload)
+                    # print(continuation_payload)
                     # print(f"{len(continuation_payload)} len of continuation paylaod")
                     payload = json.loads(continuation_payload)
                     continuation_payload = b""
                 else:
                     payload = json.loads(frame.payload)
-            print(payload)
+            # print(payload)
 
             # actualy sending it out
             if payload["messageType"] == "chatMessage":
@@ -82,13 +92,13 @@ def handshake(request,handler):
             if payload["messageType"] == "webRTC-offer" or payload["messageType"] == "webRTC-answer" or payload["messageType"] == "webRTC-candidate":
                 frame = generate_ws_frame(json.dumps(payload).encode("utf-8"))
                 other_client = (active_clients.index(handler) + 1) % 2
-                print(active_clients)
+                # print(active_clients)
                 active_clients[other_client].request.sendall(frame)
 
         
         
 def send_message(username, message, browser_cookie):
-    print(f"Sending message")
+    # print(f"Sending message")
     id = save_message(username,message, browser_cookie)
     payload = {
         'messageType': 'chatMessage', 
@@ -102,7 +112,7 @@ def send_message(username, message, browser_cookie):
     # print(frame)
     for client in active_clients:
         client.request.sendall(frame)
-        print(client)
+        # print(client)
 
 
 

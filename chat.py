@@ -95,9 +95,6 @@ def save_message(username,message, browser_cookie):
     return id
 
 
-
-
-
 def receive_image(requst,handler,filename):
     username = get_username(requst)
     message = f'<img src="/{filename}" alt="user upload"/>'
